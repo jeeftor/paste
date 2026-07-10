@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paste</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-hover: #1c2331;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --danger: #f85149;
+  --success: #3fb950;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header h1 .logo {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--bg);
+  font-weight: 700;
+}
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.ttl-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ttl-select:hover { border-color: var(--accent); }
+
+/* Main layout */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Drop zone */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 24px;
+  text-align: center;
+  margin-bottom: 24px;
+  transition: all 0.2s;
+  cursor: pointer;
+  background: var(--bg-card);
+}
+.dropzone:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+.dropzone.dragover {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.08);
+  transform: scale(1.01);
+}
+.dropzone-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+.dropzone-text {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.dropzone-text strong {
+  color: var(--accent);
+}
+.dropzone-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* Text input */
+.text-input-section {
+  margin-bottom: 24px;
+}
+.text-input {
+  width: 100%;
+  min-height: 120px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 16px;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.text-input-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  align-items: center;
+}
+.text-name {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.text-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg-hover); }
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.btn-danger:hover { background: var(--danger); color: var(--bg); }
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* Items grid */
+.items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.items-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.items-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* Item card */
+.item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: all 0.2s;
+}
+.item-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.item-thumb {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.item-thumb .file-icon {
+  font-size: 48px;
+  opacity: 0.4;
+}
+.item-thumb .code-preview {
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: pre;
+  text-align: left;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.item-info {
+  padding: 12px 16px;
+}
+.item-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.item-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.item-meta .badge {
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.item-meta .badge.expires {
+  color: var(--accent);
+}
+.item-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--success);
+  color: var(--text);
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  z-index: 200;
+  animation: slideIn 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.toast.error { border-color: var(--danger); }
+@keyframes slideIn {
+  from { transform: translateY(100px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+}
+.empty-icon { font-size: 64px; opacity: 0.2; margin-bottom: 16px; }
+
+/* Modal for text view */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 300;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 900px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { font-size: 15px; }
+.modal-body {
+  padding: 20px;
+  overflow: auto;
+  flex: 1;
+}
+.modal-body pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-body pre code {
+  background: var(--bg);
+  padding: 16px;
+  border-radius: var(--radius);
+  display: block;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .items-grid { grid-template-columns: 1fr; }
+  .header { padding: 12px 16px; }
+  .main { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="logo">P</span> Paste</h1>
+  <div class="header-actions">
+    <select class="ttl-select" id="ttl">
+      <option value="1h">Expires in 1 hour</option>
+      <option value="1d">Expires in 1 day</option>
+      <option value="7d" selected>Expires in 7 days</option>
+      <option value="30d">Expires in 30 days</option>
+      <option value="never">Never expires</option>
+    </select>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Drop zone -->
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="dropzone-icon">📋</div>
+    <div class="dropzone-text"><strong>Ctrl+V</strong> to paste an image, or drag & drop files here</div>
+    <div class="dropzone-hint">You can also click to browse, or paste text below</div>
+    <input type="file" id="fileInput" hidden multiple>
+  </div>
+
+  <!-- Text input -->
+  <div class="text-input-section">
+    <textarea class="text-input" id="textInput" placeholder="Paste text or code here... (Ctrl+Enter to submit)"></textarea>
+    <div class="text-input-actions">
+      <input type="text" class="text-name" id="textName" placeholder="filename (optional, e.g. snippet.py)">
+      <button class="btn btn-primary" onclick="submitText()">Paste Text</button>
+    </div>
+  </div>
+
+  <!-- Items -->
+  <div class="items-header">
+    <h2>All Items</h2>
+    <span class="items-count" id="itemsCount"></span>
+  </div>
+  <div id="itemsGrid" class="items-grid"></div>
+  <div id="emptyState" class="empty" style="display:none">
+    <div class="empty-icon">📭</div>
+    <p>No items yet. Paste something above!</p>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle"></h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="copyModalUrl()">Copy URL</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+let currentModalId = null;
+
+// --- File upload ---
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  for (const file of e.target.files) {
+    uploadFile(file);
+  }
+  this.value = '';
+});
+
+// --- Drag and drop ---
+const dropzone = document.getElementById('dropzone');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+  dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); });
+});
+['dragenter', 'dragover'].forEach(ev => {
+  dropzone.addEventListener(ev, () => dropzone.classList.add('dragover'));
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropzone.addEventListener(ev, () => dropzone.classList.remove('dragover'));
+});
+dropzone.addEventListener('drop', e => {
+  for (const file of e.dataTransfer.files) {
+    uploadFile(file);
+  }
+});
+
+// --- Ctrl+V paste ---
+document.onpaste = function(e) {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const blob = item.getAsFile();
+      if (blob) {
+        // Generate a filename if the blob doesn't have one
+        if (!blob.name || blob.name === 'image.png') {
+          const ext = blob.type.split('/')[1] || 'png';
+          blob.name = `clipboard_${Date.now()}.${ext}`;
+        }
+        uploadFile(blob);
+        e.preventDefault();
+      }
+    }
+  }
+};
+
+// --- Ctrl+Enter to submit text ---
+document.getElementById('textInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) {
+    submitText();
+  }
+});
+
+function uploadFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('ttl', document.getElementById('ttl').value);
+
+  fetch(`${API}/upload`, { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        showToast(data.error, true);
+      } else {
+        showToast(`Uploaded: ${data.name} → ${data.url}`);
+        loadItems();
+      }
+    })
+    .catch(err => showToast('Upload failed: ' + err, true));
+}
+
+function submitText() {
+  const content = document.getElementById('textInput').value.trim();
+  if (!content) return;
+  const name = document.getElementById('textName').value.trim();
+  const ttl = document.getElementById('ttl').value;
+
+  fetch(`${API}/text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, name, ttl })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        showToast(data.error, true);
+      } else {
+        showToast(`Created: ${data.name} → ${data.url}`);
+        document.getElementById('textInput').value = '';
+        document.getElementById('textName').value = '';
+        loadItems();
+      }
+    })
+    .catch(err => showToast('Failed: ' + err, true));
+}
+
+function deleteItem(id, name) {
+  if (!confirm(`Delete "${name}"?`)) return;
+  fetch(`${API}/files/${id}`, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(() => {
+      showToast(`Deleted: ${name}`);
+      loadItems();
+    })
+    .catch(err => showToast('Delete failed: ' + err, true));
+}
+
+function copyUrl(id) {
+  const url = `${window.location.origin}/f/${id}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showToast(`Copied URL: ${url}`);
+  });
+}
+
+function copyTextUrl(id) {
+  const url = `${window.location.origin}/t/${id}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showToast(`Copied URL: ${url}`);
+  });
+}
+
+function copyModalUrl() {
+  if (!currentModalId) return;
+  const item = window._currentItem;
+  if (!item) return;
+  const url = item.type === 'text'
+    ? `${window.location.origin}/t/${item.id}`
+    : `${window.location.origin}/f/${item.id}`;
+  navigator.clipboard.writeText(url).then(() => showToast(`Copied: ${url}`));
+}
+
+function viewText(id) {
+  fetch(`${API}/files/${id}`)
+    .then(r => r.json())
+    .then(data => {
+      window._currentItem = { id, type: 'text' };
+      currentModalId = id;
+      document.getElementById('modalTitle').textContent = data.name;
+      const body = document.getElementById('modalBody');
+      // Try to detect language and highlight
+      const lang = detectLang(data.name);
+      if (lang && window.hljs) {
+        body.innerHTML = `<pre><code class="language-${lang}">${escapeHtml(data.content)}</code></pre>`;
+        hljs.highlightElement(body.querySelector('code'));
+      } else if (window.hljs) {
+        body.innerHTML = `<pre><code>${escapeHtml(data.content)}</code></pre>`;
+        hljs.highlightElement(body.querySelector('code'));
+      } else {
+        body.innerHTML = `<pre>${escapeHtml(data.content)}</pre>`;
+      }
+      document.getElementById('modal').classList.add('show');
+    });
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  currentModalId = null;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function detectLang(filename) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const map = {
+    'py': 'python', 'js': 'javascript', 'ts': 'typescript', 'go': 'go',
+    'rs': 'rust', 'java': 'java', 'c': 'c', 'cpp': 'cpp', 'h': 'c',
+    'sh': 'bash', 'bash': 'bash', 'yml': 'yaml', 'yaml': 'yaml',
+    'json': 'json', 'xml': 'xml', 'html': 'html', 'css': 'css',
+    'sql': 'sql', 'md': 'markdown', 'txt': 'plaintext', 'log': 'plaintext',
+    'php': 'php', 'rb': 'ruby', 'swift': 'swift', 'kt': 'kotlin',
+    'dockerfile': 'dockerfile', 'env': 'ini', 'toml': 'ini',
+  };
+  return map[ext] || '';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function formatExpiry(expires) {
+  if (!expires || expires === '0001-01-01T00:00:00Z') return 'never';
+  const d = new Date(expires);
+  const now = new Date();
+  const diff = d - now;
+  if (diff < 0) return 'expired';
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d left`;
+  if (hours > 0) return `${hours}h left`;
+  const mins = Math.floor(diff / 60000);
+  return `${mins}m left`;
+}
+
+function loadItems() {
+  fetch(`${API}/files`)
+    .then(r => r.json())
+    .then(data => {
+      const grid = document.getElementById('itemsGrid');
+      const empty = document.getElementById('emptyState');
+      const count = document.getElementById('itemsCount');
+      const items = data.items || [];
+
+      count.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+
+      if (items.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      grid.innerHTML = items.map(item => {
+        let thumb = '';
+        if (item.type === 'text') {
+          // We'll load text content lazily for preview
+          thumb = `<div class="item-thumb"><div class="code-preview" id="preview-${item.id}">Loading...</div></div>`;
+        } else if (item.mime_type && item.mime_type.startsWith('image/')) {
+          thumb = `<div class="item-thumb"><img src="/f/${item.id}" alt="${escapeHtml(item.name)}" loading="lazy"></div>`;
+        } else {
+          thumb = `<div class="item-thumb"><div class="file-icon">📄</div></div>`;
+        }
+
+        const expiryText = formatExpiry(item.expires);
+        const expiryClass = expiryText !== 'never' && expiryText !== 'expired' ? 'expires' : '';
+
+        let actions = '';
+        if (item.type === 'text') {
+          actions = `
+            <button class="btn btn-secondary btn-sm" onclick="viewText('${item.id}')">View</button>
+            <button class="btn btn-secondary btn-sm" onclick="copyTextUrl('${item.id}')">Copy URL</button>
+            <button class="btn btn-danger" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">🗑</button>
+          `;
+        } else {
+          actions = `
+            <a class="btn btn-secondary btn-sm" href="/f/${item.id}" target="_blank">Open</a>
+            <button class="btn btn-secondary btn-sm" onclick="copyUrl('${item.id}')">Copy URL</button>
+            <button class="btn btn-danger" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">🗑</button>
+          `;
+        }
+
+        return `
+          <div class="item-card">
+            ${thumb}
+            <div class="item-info">
+              <div class="item-name">${escapeHtml(item.name)}</div>
+              <div class="item-meta">
+                <span class="badge">${item.type}</span>
+                <span class="badge">${formatSize(item.size)}</span>
+                <span class="badge ${expiryClass}">${expiryText}</span>
+                <span class="badge">${item.id}</span>
+              </div>
+            </div>
+            <div class="item-actions">${actions}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Load text previews
+      items.filter(i => i.type === 'text').forEach(item => {
+        fetch(`${API}/files/${item.id}`)
+          .then(r => r.json())
+          .then(data => {
+            const el = document.getElementById(`preview-${item.id}`);
+            if (el) {
+              const preview = data.content.substring(0, 200);
+              el.textContent = preview;
+            }
+          });
+      });
+    });
+}
+
+function showToast(msg, isError) {
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (isError ? ' error' : '');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// Auto-refresh every 30 seconds
+setInterval(loadItems, 30000);
+
+// Initial load
+loadItems();
+</script>
+</body>
+</html>
