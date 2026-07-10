@@ -391,6 +391,171 @@ body {
   .items-grid { grid-template-columns: 1fr; }
   .header { padding: 12px 16px; }
   .main { padding: 16px; }
+  .tabs { padding: 0 16px; }
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  background: var(--bg);
+  position: sticky;
+  top: 57px;
+  z-index: 99;
+}
+.tab {
+  padding: 10px 20px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font);
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* API docs */
+.api-section {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.api-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.api-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.api-method {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  min-width: 56px;
+  text-align: center;
+}
+.api-method.GET { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+.api-method.POST { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+.api-method.DELETE { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+.api-path {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.api-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.api-card-body {
+  padding: 12px 16px;
+}
+.api-example {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.6;
+}
+.api-example .curl { color: var(--accent); }
+.api-example .flag { color: var(--success); }
+.api-example .url { color: var(--text); }
+.api-example .json-key { color: #79b8ff; }
+.api-example .json-str { color: #7ee787; }
+.copy-btn {
+  float: right;
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-bottom: 4px;
+}
+
+/* MCP docs */
+.mcp-tool-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  padding: 16px;
+}
+.mcp-tool-name {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.mcp-tool-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.mcp-tool-params {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.mcp-tool-params .param-name { color: var(--text); }
+.mcp-tool-params .param-type { color: var(--accent); }
+.mcp-config-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 16px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.mcp-info-banner {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.mcp-info-banner h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.mcp-info-banner p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.mcp-info-banner code {
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
 }
 </style>
 </head>
@@ -409,33 +574,232 @@ body {
   </div>
 </div>
 
-<div class="main">
-  <!-- Drop zone -->
-  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-    <div class="dropzone-icon">📋</div>
-    <div class="dropzone-text"><strong>Ctrl+V</strong> to paste an image, or drag & drop files here</div>
-    <div class="dropzone-hint">You can also click to browse, or paste text below</div>
-    <input type="file" id="fileInput" hidden multiple>
-  </div>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('clipboard')">Clipboard</button>
+  <button class="tab" onclick="switchTab('rest')">REST API</button>
+  <button class="tab" onclick="switchTab('mcp')">MCP</button>
+</div>
 
-  <!-- Text input -->
-  <div class="text-input-section">
-    <textarea class="text-input" id="textInput" placeholder="Paste text or code here... (Ctrl+Enter to submit)"></textarea>
-    <div class="text-input-actions">
-      <input type="text" class="text-name" id="textName" placeholder="filename (optional, e.g. snippet.py)">
-      <button class="btn btn-primary" onclick="submitText()">Paste Text</button>
+<!-- Tab: Clipboard -->
+<div class="tab-content active" id="tab-clipboard">
+  <div class="main">
+    <!-- Drop zone -->
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="dropzone-icon">📋</div>
+      <div class="dropzone-text"><strong>Ctrl+V</strong> to paste an image or text, or drag & drop files here</div>
+      <div class="dropzone-hint">You can also click to browse, or paste text below</div>
+      <input type="file" id="fileInput" hidden multiple>
+    </div>
+
+    <!-- Text input -->
+    <div class="text-input-section">
+      <textarea class="text-input" id="textInput" placeholder="Paste text or code here... (Ctrl+Enter to submit)"></textarea>
+      <div class="text-input-actions">
+        <input type="text" class="text-name" id="textName" placeholder="filename (optional, e.g. snippet.py)">
+        <button class="btn btn-primary" onclick="submitText()">Paste Text</button>
+      </div>
+    </div>
+
+    <!-- Items -->
+    <div class="items-header">
+      <h2>All Items</h2>
+      <span class="items-count" id="itemsCount"></span>
+    </div>
+    <div id="itemsGrid" class="items-grid"></div>
+    <div id="emptyState" class="empty" style="display:none">
+      <div class="empty-icon">📭</div>
+      <p>No items yet. Paste something above!</p>
     </div>
   </div>
+</div>
 
-  <!-- Items -->
-  <div class="items-header">
-    <h2>All Items</h2>
-    <span class="items-count" id="itemsCount"></span>
+<!-- Tab: REST API -->
+<div class="tab-content" id="tab-rest">
+  <div class="api-section">
+    <div class="mcp-info-banner">
+      <h3>REST API</h3>
+      <p>All endpoints are open — no auth required. Base URL: <code id="restBaseUrl"></code></p>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/files</span>
+        <span class="api-desc">List all items</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl1"></span>/api/files</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/upload</span>
+        <span class="api-desc">Upload a file</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-F</span> <span class="json-str">'file=@screenshot.png'</span> <span class="flag">-F</span> <span class="json-str">'ttl=7d'</span> <span class="url" id="restUrl2"></span>/api/upload</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/text</span>
+        <span class="api-desc">Create a text snippet</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="flag">-H</span> <span class="json-str">'Content-Type: application/json'</span> \
+  <span class="flag">-d</span> <span class="json-str">'{"content":"hello world","name":"note.txt","ttl":"7d"}'</span> \
+  <span class="url" id="restUrl3"></span>/api/text</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/files/{id}</span>
+        <span class="api-desc">Download a file or get text content</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl4"></span>/api/files/<span class="json-key">{id}</span> <span class="flag">-o</span> file.png</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/text/{id}</span>
+        <span class="api-desc">Get raw text snippet</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl5"></span>/api/text/<span class="json-key">{id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method DELETE">DELETE</span>
+        <span class="api-path">/api/files/{id}</span>
+        <span class="api-desc">Delete an item</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> DELETE <span class="url" id="restUrl6"></span>/api/files/<span class="json-key">{id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/f/{id}</span>
+        <span class="api-desc">Direct file access (in browser)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="url" id="restUrl7"></span>/f/<span class="json-key">{id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/t/{id}</span>
+        <span class="api-desc">Direct text access (raw, in browser)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="url" id="restUrl8"></span>/t/<span class="json-key">{id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/health</span>
+        <span class="api-desc">Health check</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl9"></span>/health</div>
+      </div>
+    </div>
   </div>
-  <div id="itemsGrid" class="items-grid"></div>
-  <div id="emptyState" class="empty" style="display:none">
-    <div class="empty-icon">📭</div>
-    <p>No items yet. Paste something above!</p>
+</div>
+
+<!-- Tab: MCP -->
+<div class="tab-content" id="tab-mcp">
+  <div class="api-section">
+    <div class="mcp-info-banner">
+      <h3>MCP Server</h3>
+      <p>JSON-RPC 2.0 over HTTP. No auth required.</p>
+      <p>Endpoint: <code id="mcpEndpoint"></code></p>
+      <p>Protocol version: <code>2024-11-05</code></p>
+    </div>
+
+    <h3 style="font-size:16px; margin-bottom:12px;">Hermes Configuration</h3>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">
+      Add to <code style="color:var(--accent);">~/.hermes/config.yaml</code> under <code style="color:var(--accent);">mcp_servers</code>:
+    </p>
+    <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+    <div class="mcp-config-block" id="mcpHermesConfig"></div>
+
+    <h3 style="font-size:16px; margin: 24px 0 12px;">Claude Desktop / MCP Client Configuration</h3>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">
+      Add to your MCP client config:
+    </p>
+    <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+    <div class="mcp-config-block" id="mcpClientConfig"></div>
+
+    <h3 style="font-size:16px; margin: 24px 0 12px;">Available Tools</h3>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">list_files</div>
+      <div class="mcp-tool-desc">List all pasted files and text snippets with metadata (id, name, type, size, created, expires, url).</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">(none)</span></div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">get_file</div>
+      <div class="mcp-tool-desc">Get the content of a file or text snippet by ID. Returns base64-encoded content for files, plain text for text snippets.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the item</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">get_file_url</div>
+      <div class="mcp-tool-desc">Get the public URL for a file or text snippet by ID.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the item</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">upload_file</div>
+      <div class="mcp-tool-desc">Upload a file (base64-encoded content + filename). Returns the item ID and URL.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">filename</span> (<span class="param-type">string</span>, required), <span class="param-name">content</span> (<span class="param-type">string</span>, required, base64), <span class="param-name">mime_type</span> (<span class="param-type">string</span>, optional), <span class="param-name">ttl</span> (<span class="param-type">string</span>, optional: 1h, 1d, 7d, 30d, never)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">create_text</div>
+      <div class="mcp-tool-desc">Create a text snippet. Returns the item ID and URL.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">content</span> (<span class="param-type">string</span>, required), <span class="param-name">name</span> (<span class="param-type">string</span>, optional), <span class="param-name">ttl</span> (<span class="param-type">string</span>, optional: 1h, 1d, 7d, 30d, never)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">get_text</div>
+      <div class="mcp-tool-desc">Get the raw text content of a text snippet by ID.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the text snippet</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">delete_file</div>
+      <div class="mcp-tool-desc">Delete a file or text snippet by ID.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the item to delete</div>
+    </div>
   </div>
 </div>
 
@@ -455,7 +819,56 @@ body {
 
 <script>
 const API = '/api';
+const BASE = window.location.origin;
 let currentModalId = null;
+
+// --- Tab switching ---
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// --- Populate API/MCP URLs on load ---
+(function populateUrls() {
+  // REST tab
+  const restBase = document.getElementById('restBaseUrl');
+  if (restBase) restBase.textContent = BASE;
+  for (let i = 1; i <= 9; i++) {
+    const el = document.getElementById('restUrl' + i);
+    if (el) el.textContent = BASE;
+  }
+  // MCP tab
+  const mcpEp = document.getElementById('mcpEndpoint');
+  if (mcpEp) mcpEp.textContent = BASE + '/mcp';
+  const hermesCfg = document.getElementById('mcpHermesConfig');
+  if (hermesCfg) hermesCfg.textContent =
+    'mcp_servers:\n' +
+    '  paste:\n' +
+    '    url: ' + BASE + '/mcp\n' +
+    '    transport: http';
+  const clientCfg = document.getElementById('mcpClientConfig');
+  if (clientCfg) clientCfg.textContent =
+    '{\n' +
+    '  "mcpServers": {\n' +
+    '    "paste": {\n' +
+    '      "url": "' + BASE + '/mcp"\n' +
+    '    }\n' +
+    '  }\n' +
+    '}';
+})();
+
+// --- Copy code blocks ---
+function copyCode(btn) {
+  const block = btn.nextElementSibling;
+  const text = block.innerText.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
 
 // --- File upload ---
 document.getElementById('fileInput').addEventListener('change', function(e) {
