@@ -134,6 +134,68 @@ body {
   margin-top: 8px;
 }
 
+/* Camera */
+.camera-section {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.camera-btn svg { vertical-align: middle; }
+.camera-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 300;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  flex-direction: column;
+}
+.camera-modal.show { display: flex; }
+.camera-modal video {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: var(--radius);
+  background: #000;
+  transform: scaleX(-1);
+}
+.camera-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  align-items: center;
+}
+.capture-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid var(--text);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.capture-btn:hover { border-color: var(--accent); transform: scale(1.05); }
+.capture-btn:active { transform: scale(0.95); }
+.capture-btn svg { width: 28px; height: 28px; color: var(--text); }
+.camera-switch {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.camera-switch:hover { color: var(--text); border-color: var(--accent); }
+.camera-switch svg { width: 20px; height: 20px; }
+
 /* Text input */
 .text-input-section {
   margin-bottom: 24px;
@@ -210,6 +272,65 @@ body {
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
+}
+
+/* Icon buttons with tooltips */
+.icon-btn {
+  position: relative;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.icon-btn:active {
+  transform: scale(0.95);
+}
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.icon-btn.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.icon-btn.danger:hover {
+  background: var(--danger);
+  color: var(--bg);
+}
+.icon-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease 0s;
+}
+.icon-btn[data-tooltip]:hover::after {
+  opacity: 1;
+  transition: opacity 0.15s ease 0.3s;
 }
 
 /* Items grid */
@@ -591,6 +712,14 @@ body {
       <input type="file" id="fileInput" hidden multiple>
     </div>
 
+    <!-- Camera button -->
+    <div class="camera-section">
+      <button class="btn btn-secondary camera-btn" onclick="openCamera(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        Take Snapshot
+      </button>
+    </div>
+
     <!-- Text input -->
     <div class="text-input-section">
       <textarea class="text-input" id="textInput" placeholder="Paste text or code here... (Ctrl+Enter to submit)"></textarea>
@@ -808,12 +937,27 @@ body {
   <div class="modal">
     <div class="modal-header">
       <h3 id="modalTitle"></h3>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="copyModalUrl()">Copy URL</button>
-        <button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="icon-btn" data-tooltip="Copy content to clipboard" id="modalCopyContentBtn" onclick="copyModalContent()" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+        <button class="icon-btn" data-tooltip="Copy URL" onclick="copyModalUrl()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
+        <button class="icon-btn" data-tooltip="Close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
       </div>
     </div>
     <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Camera modal -->
+<div class="camera-modal" id="cameraModal">
+  <video id="cameraVideo" autoplay playsinline></video>
+  <div class="camera-controls">
+    <button class="camera-switch" id="cameraSwitchBtn" onclick="switchCamera()" data-tooltip="Switch camera" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    </button>
+    <button class="capture-btn" onclick="capturePhoto()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+    </button>
+    <button class="btn btn-secondary" onclick="closeCamera()">Cancel</button>
   </div>
 </div>
 
@@ -821,6 +965,17 @@ body {
 const API = '/api';
 const BASE = window.location.origin;
 let currentModalId = null;
+
+// --- SVG icons (feather-style, 24x24 stroke) ---
+const ICONS = {
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+  external: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>',
+};
 
 // --- Tab switching ---
 function switchTab(tab) {
@@ -1027,6 +1182,113 @@ function copyTextUrl(id) {
   });
 }
 
+function copyTextContent(id) {
+  fetch(`${API}/files/${id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { showToast('Error: ' + data.error, true); return; }
+      navigator.clipboard.writeText(data.content).then(() => {
+        showToast(`Copied content (${data.content.length} chars)`);
+      }).catch(() => showToast('Clipboard write failed', true));
+    })
+    .catch(() => showToast('Failed to fetch content', true));
+}
+
+function copyImageToClipboard(id) {
+  fetch(`/f/${id}`)
+    .then(r => r.blob())
+    .then(blob => {
+      if (!navigator.clipboard || !navigator.clipboard.write) {
+        showToast('Clipboard write not supported in this browser', true);
+        return;
+      }
+      const item = new ClipboardItem({ [blob.type]: blob });
+      navigator.clipboard.write([item]).then(() => {
+        showToast(`Copied image to clipboard (${formatSize(blob.size)})`);
+      }).catch(() => showToast('Failed to copy image — try a Chromium browser', true));
+    })
+    .catch(() => showToast('Failed to fetch image', true));
+}
+
+// --- Camera ---
+let cameraStream = null;
+let cameraFacing = 'environment';
+
+function openCamera(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Camera not supported in this browser', true);
+    return;
+  }
+  // Enumerate cameras to show switch button if multiple exist
+  navigator.mediaDevices.enumerateDevices().then(devices => {
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    const switchBtn = document.getElementById('cameraSwitchBtn');
+    switchBtn.style.display = cams.length > 1 ? 'flex' : 'none';
+  }).catch(() => {});
+  startCamera();
+}
+
+function startCamera() {
+  const constraints = { video: { facingMode: cameraFacing } };
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(stream => {
+      cameraStream = stream;
+      const video = document.getElementById('cameraVideo');
+      video.srcObject = stream;
+      document.getElementById('cameraModal').classList.add('show');
+    })
+    .catch(err => {
+      showToast('Camera access denied or unavailable: ' + err.message, true);
+    });
+}
+
+function switchCamera() {
+  cameraFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  startCamera();
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  if (!video.videoWidth) {
+    showToast('Camera not ready yet', true);
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  // Mirror the preview for front camera to match what the user sees
+  if (cameraFacing === 'user') {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    if (!blob) {
+      showToast('Failed to capture photo', true);
+      return;
+    }
+    const file = new File([blob], `snapshot_${Date.now()}.png`, { type: 'image/png' });
+    closeCamera();
+    uploadFile(file);
+  }, 'image/png');
+}
+
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  const video = document.getElementById('cameraVideo');
+  video.srcObject = null;
+  document.getElementById('cameraModal').classList.remove('show');
+}
+
 function copyModalUrl() {
   if (!currentModalId) return;
   const item = window._currentItem;
@@ -1041,7 +1303,7 @@ function viewText(id) {
   fetch(`${API}/files/${id}`)
     .then(r => r.json())
     .then(data => {
-      window._currentItem = { id, type: 'text' };
+      window._currentItem = { id, type: 'text', content: data.content };
       currentModalId = id;
       document.getElementById('modalTitle').textContent = data.name;
       const body = document.getElementById('modalBody');
@@ -1056,13 +1318,24 @@ function viewText(id) {
       } else {
         body.innerHTML = `<pre>${escapeHtml(data.content)}</pre>`;
       }
+      // Show the copy-content button for text items
+      document.getElementById('modalCopyContentBtn').style.display = 'inline-flex';
       document.getElementById('modal').classList.add('show');
     });
 }
 
 function closeModal() {
   document.getElementById('modal').classList.remove('show');
+  document.getElementById('modalCopyContentBtn').style.display = 'none';
   currentModalId = null;
+}
+
+function copyModalContent() {
+  const item = window._currentItem;
+  if (!item || item.type !== 'text') return;
+  navigator.clipboard.writeText(item.content).then(() => {
+    showToast(`Copied content (${item.content.length} chars)`);
+  }).catch(() => showToast('Clipboard write failed', true));
 }
 
 function escapeHtml(s) {
@@ -1140,15 +1413,23 @@ function loadItems() {
         let actions = '';
         if (item.type === 'text') {
           actions = `
-            <button class="btn btn-secondary btn-sm" onclick="viewText('${item.id}')">View</button>
-            <button class="btn btn-secondary btn-sm" onclick="copyTextUrl('${item.id}')">Copy URL</button>
-            <button class="btn btn-danger" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">🗑</button>
+            <button class="icon-btn" data-tooltip="View" onclick="viewText('${item.id}')">${ICONS.eye}</button>
+            <button class="icon-btn" data-tooltip="Copy content to clipboard" onclick="copyTextContent('${item.id}')">${ICONS.copy}</button>
+            <button class="icon-btn" data-tooltip="Copy URL" onclick="copyTextUrl('${item.id}')">${ICONS.link}</button>
+            <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
+          `;
+        } else if (item.mime_type && item.mime_type.startsWith('image/')) {
+          actions = `
+            <a class="icon-btn" data-tooltip="Open" href="/f/${item.id}" target="_blank">${ICONS.external}</a>
+            <button class="icon-btn" data-tooltip="Copy image to clipboard" onclick="copyImageToClipboard('${item.id}')">${ICONS.image}</button>
+            <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
+            <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
           `;
         } else {
           actions = `
-            <a class="btn btn-secondary btn-sm" href="/f/${item.id}" target="_blank">Open</a>
-            <button class="btn btn-secondary btn-sm" onclick="copyUrl('${item.id}')">Copy URL</button>
-            <button class="btn btn-danger" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">🗑</button>
+            <a class="icon-btn" data-tooltip="Open" href="/f/${item.id}" target="_blank">${ICONS.external}</a>
+            <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
+            <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
           `;
         }
 
