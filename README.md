@@ -46,7 +46,7 @@ docker run -d \
 
 The vision endpoint can be configured in two ways:
 
-1. **UI Settings Panel** — Click the gear icon in the header to open the Vision LLM Settings modal. Create, edit, and switch between named presets (e.g. "Local Lemonade", "Ollama", "OpenAI"). The active preset is persisted in `{DATA_DIR}/vision_config.json`.
+1. **UI Config Tab** — Click the "Config" tab in the web UI to view and manage vision LLM presets. Create, edit, and switch between named presets (e.g. "Local Lemonade", "Ollama", "OpenAI"). The active preset is persisted in `{DATA_DIR}/vision_config.json`.
 
 2. **Environment Variables** — Set `VISION_ENDPOINT` and/or `VISION_MODEL` to override the UI config. When env vars are set, an "env" preset appears in the UI and is locked as active. This is useful for Docker deployments where you want to lock the config.
 

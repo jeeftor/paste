@@ -991,9 +991,6 @@ body {
       <option value="30d">Expires in 30 days</option>
       <option value="never">Never expires</option>
     </select>
-    <button class="settings-btn" onclick="openSettings()" data-tooltip="Vision LLM Settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-    </button>
   </div>
 </div>
 
@@ -1002,6 +999,7 @@ body {
   <button class="tab" onclick="switchTab('persistent', event)">Persistent</button>
   <button class="tab" onclick="switchTab('rest', event)">REST API</button>
   <button class="tab" onclick="switchTab('mcp', event)">MCP</button>
+  <button class="tab" onclick="switchTab('config', event)">Config</button>
 </div>
 
 <!-- Tab: Clipboard -->
@@ -1445,6 +1443,67 @@ body {
   </div>
 </div>
 
+<!-- Tab: Config -->
+<div class="tab-content" id="tab-config">
+  <div class="main">
+    <div class="mcp-info-banner">
+      <h3>Vision LLM Configuration</h3>
+      <p>Configure the vision model used for automatic image analysis. Switch between presets or create your own.</p>
+    </div>
+
+    <div id="settingsEnvBanner" class="settings-env-banner" style="display:none">
+      Environment variables (VISION_ENDPOINT / VISION_MODEL) are overriding UI configuration. To change settings from the UI, unset these env vars and restart.
+    </div>
+
+    <div class="settings-section">
+      <h4>Vision Processing</h4>
+      <div class="toggle-row">
+        <label>Enable automatic image analysis on upload</label>
+        <div class="toggle-switch" id="visionEnabledToggle" onclick="toggleVisionEnabled()"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h4>LLM Presets</h4>
+      <div class="preset-list" id="presetList"></div>
+      <button class="btn btn-secondary" style="margin-top:12px;font-size:13px;padding:6px 12px" onclick="showPresetForm()">+ Add Preset</button>
+
+      <div class="preset-form" id="presetForm">
+        <input type="hidden" id="presetFormMode" value="add">
+        <div class="preset-form-row">
+          <label>Name (unique identifier)</label>
+          <input type="text" id="presetFormName" placeholder="my-llm">
+        </div>
+        <div class="preset-form-row">
+          <label>Endpoint URL</label>
+          <input type="text" id="presetFormEndpoint" placeholder="http://localhost:11434/v1/chat/completions">
+        </div>
+        <div class="preset-form-row">
+          <label>Model Name</label>
+          <input type="text" id="presetFormModel" placeholder="llama3.2-vision">
+        </div>
+        <div class="preset-form-row">
+          <label>API Key (optional)</label>
+          <input type="password" id="presetFormApiKey" placeholder="sk-...">
+        </div>
+        <div class="preset-form-row">
+          <label>Description (optional)</label>
+          <input type="text" id="presetFormDesc" placeholder="Local Ollama instance">
+        </div>
+        <div class="preset-form-actions">
+          <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="savePresetForm()">Save</button>
+          <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px" onclick="hidePresetForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h4>Vision Prompts</h4>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Manage vision prompt templates via the <code style="color:var(--accent)">/api/prompts</code> REST API. Built-in prompts: <code>default</code>, <code>terminal</code>, <code>code</code>, <code>document</code>, <code>diagram</code>.</p>
+    </div>
+  </div>
+</div>
+
 <!-- Modal -->
 <div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -1457,63 +1516,6 @@ body {
       </div>
     </div>
     <div class="modal-body" id="modalBody"></div>
-  </div>
-</div>
-
-<!-- Settings modal -->
-<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
-  <div class="modal settings-modal">
-    <div class="modal-header">
-      <h3>Vision LLM Settings</h3>
-      <button class="icon-btn" data-tooltip="Close" onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-    </div>
-    <div class="modal-body">
-      <div id="settingsEnvBanner" class="settings-env-banner" style="display:none">
-        Environment variables (VISION_ENDPOINT/VISION_MODEL) are overriding UI configuration. To change settings from the UI, unset these env vars.
-      </div>
-
-      <div class="settings-section">
-        <h4>Vision Processing</h4>
-        <div class="toggle-row">
-          <label>Enable automatic image analysis on upload</label>
-          <div class="toggle-switch" id="visionEnabledToggle" onclick="toggleVisionEnabled()"></div>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>LLM Presets</h4>
-        <div class="preset-list" id="presetList"></div>
-        <button class="btn btn-secondary" style="margin-top:12px;font-size:13px;padding:6px 12px" onclick="showPresetForm()">+ Add Preset</button>
-
-        <div class="preset-form" id="presetForm">
-          <input type="hidden" id="presetFormMode" value="add">
-          <div class="preset-form-row">
-            <label>Name (unique identifier)</label>
-            <input type="text" id="presetFormName" placeholder="my-llm">
-          </div>
-          <div class="preset-form-row">
-            <label>Endpoint URL</label>
-            <input type="text" id="presetFormEndpoint" placeholder="http://localhost:11434/v1/chat/completions">
-          </div>
-          <div class="preset-form-row">
-            <label>Model Name</label>
-            <input type="text" id="presetFormModel" placeholder="llama3.2-vision">
-          </div>
-          <div class="preset-form-row">
-            <label>API Key (optional)</label>
-            <input type="password" id="presetFormApiKey" placeholder="sk-...">
-          </div>
-          <div class="preset-form-row">
-            <label>Description (optional)</label>
-            <input type="text" id="presetFormDesc" placeholder="Local Ollama instance">
-          </div>
-          <div class="preset-form-actions">
-            <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="savePresetForm()">Save</button>
-            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px" onclick="hidePresetForm()">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1557,6 +1559,7 @@ function switchTab(tab, ev) {
   if (ev) ev.target.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'persistent') loadPersistentItems();
+  if (tab === 'config') loadVisionConfig();
 }
 
 // --- Populate API/MCP URLs on load ---
@@ -2175,16 +2178,6 @@ function closeModal() {
 // --- Settings ---
 
 let visionConfigState = null;
-
-async function openSettings() {
-  document.getElementById('settingsModal').classList.add('show');
-  await loadVisionConfig();
-}
-
-function closeSettings() {
-  document.getElementById('settingsModal').classList.remove('show');
-  hidePresetForm();
-}
 
 async function loadVisionConfig() {
   try {
