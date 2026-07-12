@@ -3,6 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
+    tags: ['v*']
   release:
     types: [published]
 
@@ -26,9 +27,16 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
             echo "tags=type=raw,value=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "latest=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "version=${TAG}" >> $GITHUB_OUTPUT
+            echo "tags=type=raw,value=${TAG}" >> $GITHUB_OUTPUT
+            echo "latest=true" >> $GITHUB_OUTPUT
           else
             echo "version=dev-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
-            echo "tags=type=raw,value=latest" >> $GITHUB_OUTPUT
+            echo "tags=type=sha,prefix=dev-" >> $GITHUB_OUTPUT
+            echo "latest=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up Docker Buildx
@@ -48,7 +56,8 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             ${{ steps.version.outputs.tags }}
-            type=sha,prefix={{sha}}-
+          flavor: |
+            latest=${{ steps.version.outputs.latest }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
