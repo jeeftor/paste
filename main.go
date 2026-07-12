@@ -17,6 +17,15 @@ import (
 //go:embed index.html
 var indexHTML []byte
 
+//go:embed manifest.json
+var manifestJSON []byte
+
+//go:embed sw.js
+var swJS []byte
+
+//go:embed icon.svg
+var iconSVG []byte
+
 var version = "dev"
 
 const (
@@ -76,6 +85,11 @@ func main() {
 
 	// Web UI
 	mux.HandleFunc("/", rootHandler)
+
+	// PWA assets
+	mux.HandleFunc("/manifest.json", manifestHandler)
+	mux.HandleFunc("/sw.js", swHandler)
+	mux.HandleFunc("/icon.svg", iconHandler)
 
 	// REST API
 	mux.HandleFunc("/api/files", apiFilesHandler)
@@ -315,6 +329,23 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	html := strings.Replace(string(indexHTML), "{{VERSION}}", version, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
+}
+
+func manifestHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Write(manifestJSON)
+}
+
+func swHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	// Service worker should not be cached aggressively
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(swJS)
+}
+
+func iconHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Write(iconSVG)
 }
 
 func versionHandler(w http.ResponseWriter, r *http.Request) {

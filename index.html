@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
 <title>Paste</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -138,6 +144,9 @@ body {
 .camera-section {
   text-align: center;
   margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 .camera-btn svg { vertical-align: middle; }
 .camera-modal {
@@ -718,6 +727,11 @@ body {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
         Take Snapshot
       </button>
+      <button class="btn btn-secondary camera-btn" onclick="document.getElementById('cameraNativeInput').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        Camera
+      </button>
+      <input type="file" id="cameraNativeInput" accept="image/*" capture="environment" hidden>
     </div>
 
     <!-- Text input -->
@@ -975,6 +989,7 @@ const ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>',
 };
 
 // --- Tab switching ---
@@ -1027,6 +1042,14 @@ function copyCode(btn) {
 
 // --- File upload ---
 document.getElementById('fileInput').addEventListener('change', function(e) {
+  for (const file of e.target.files) {
+    uploadFile(file);
+  }
+  this.value = '';
+});
+
+// --- Native camera input (mobile) ---
+document.getElementById('cameraNativeInput').addEventListener('change', function(e) {
   for (const file of e.target.files) {
     uploadFile(file);
   }
@@ -1173,6 +1196,19 @@ function copyUrl(id) {
   navigator.clipboard.writeText(url).then(() => {
     showToast(`Copied URL: ${url}`);
   });
+}
+
+function shareItem(id, type, name) {
+  const url = type === 'text'
+    ? `${window.location.origin}/t/${id}`
+    : `${window.location.origin}/f/${id}`;
+  if (navigator.share) {
+    navigator.share({ title: name, url: url }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast(`Copied URL (share not supported): ${url}`);
+    });
+  }
 }
 
 function copyTextUrl(id) {
@@ -1415,6 +1451,7 @@ function loadItems() {
           actions = `
             <button class="icon-btn" data-tooltip="View" onclick="viewText('${item.id}')">${ICONS.eye}</button>
             <button class="icon-btn" data-tooltip="Copy content to clipboard" onclick="copyTextContent('${item.id}')">${ICONS.copy}</button>
+            <button class="icon-btn" data-tooltip="Share" onclick="shareItem('${item.id}', 'text', '${escapeHtml(item.name)}')">${ICONS.share}</button>
             <button class="icon-btn" data-tooltip="Copy URL" onclick="copyTextUrl('${item.id}')">${ICONS.link}</button>
             <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
           `;
@@ -1422,12 +1459,14 @@ function loadItems() {
           actions = `
             <a class="icon-btn" data-tooltip="Open" href="/f/${item.id}" target="_blank">${ICONS.external}</a>
             <button class="icon-btn" data-tooltip="Copy image to clipboard" onclick="copyImageToClipboard('${item.id}')">${ICONS.image}</button>
+            <button class="icon-btn" data-tooltip="Share" onclick="shareItem('${item.id}', 'file', '${escapeHtml(item.name)}')">${ICONS.share}</button>
             <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
             <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
           `;
         } else {
           actions = `
             <a class="icon-btn" data-tooltip="Open" href="/f/${item.id}" target="_blank">${ICONS.external}</a>
+            <button class="icon-btn" data-tooltip="Share" onclick="shareItem('${item.id}', 'file', '${escapeHtml(item.name)}')">${ICONS.share}</button>
             <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
             <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
           `;
@@ -1487,6 +1526,13 @@ setInterval(loadItems, 30000);
 
 // Initial load
 loadItems();
+
+// --- Service worker registration (for Share Target) ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(err => {
+    console.warn('SW registration failed:', err);
+  });
+}
 </script>
 </body>
 </html>
