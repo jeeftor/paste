@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -192,13 +193,17 @@ var mcpTools = []MCPTool{
 	},
 	{
 		Name:        "describe_image",
-		Description: "Get the vision analysis (extracted text and description) for an image item. Returns the stored analysis if available.",
+		Description: "Get the vision analysis (extracted text and description) for an image item. Returns the stored analysis if available. Optionally specify a prompt name to get a specific analysis.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"id": map[string]any{
 					"type":        "string",
 					"description": "The unique ID of the image item",
+				},
+				"prompt": map[string]any{
+					"type":        "string",
+					"description": "Optional: prompt name (e.g. 'default', 'terminal', 'code', 'document', 'diagram', or a custom prompt). If omitted, returns all analyses.",
 				},
 			},
 			"required": []string{"id"},
@@ -206,7 +211,7 @@ var mcpTools = []MCPTool{
 	},
 	{
 		Name:        "analyze_image",
-		Description: "Trigger or re-trigger vision analysis for an image item. Extracts text and generates a description using the configured vision model.",
+		Description: "Trigger or re-trigger vision analysis for an image item. Extracts text and generates a description using the configured vision model. Optionally specify a prompt name to use a specific prompt template.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -214,8 +219,20 @@ var mcpTools = []MCPTool{
 					"type":        "string",
 					"description": "The unique ID of the image item",
 				},
+				"prompt": map[string]any{
+					"type":        "string",
+					"description": "Optional: prompt name (e.g. 'default', 'terminal', 'code', 'document', 'diagram', or a custom prompt). Defaults to 'default'.",
+				},
 			},
 			"required": []string{"id"},
+		},
+	},
+	{
+		Name:        "list_prompts",
+		Description: "List all available vision prompt templates (built-in and custom).",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
 		},
 	},
 }
@@ -365,14 +382,22 @@ func handleMCPToolCall(name string, args map[string]any) (interface{}, *MCPError
 		if !ok || id == "" {
 			return nil, &MCPError{Code: -32602, Message: "id is required"}
 		}
-		return mcpDescribeImage(id)
+		promptName, _ := args["prompt"].(string)
+		return mcpDescribeImage(id, promptName)
 
 	case "analyze_image":
 		id, ok := args["id"].(string)
 		if !ok || id == "" {
 			return nil, &MCPError{Code: -32602, Message: "id is required"}
 		}
-		return mcpAnalyzeImage(id)
+		promptName, _ := args["prompt"].(string)
+		if promptName == "" {
+			promptName = "default"
+		}
+		return mcpAnalyzeImage(id, promptName)
+
+	case "list_prompts":
+		return mcpListPrompts()
 
 	default:
 		return nil, &MCPError{Code: -32601, Message: "Unknown tool: " + name}
@@ -605,7 +630,7 @@ func mcpPersistFile(id string, persistent bool) (interface{}, *MCPError) {
 	}, nil
 }
 
-func mcpDescribeImage(id string) (interface{}, *MCPError) {
+func mcpDescribeImage(id, promptName string) (interface{}, *MCPError) {
 	item, ok := findItem(id)
 	if !ok {
 		return nil, &MCPError{Code: -32602, Message: "item not found"}
@@ -613,14 +638,105 @@ func mcpDescribeImage(id string) (interface{}, *MCPError) {
 	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
 		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
 	}
-	if item.Analysis == nil {
+	if len(item.Analyses) == 0 {
 		return MCPToolResult{
-			Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("No vision analysis available for image %s. Use analyze_image to trigger analysis.", id)}},
+			Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("No vision analyses available for image %s. Use analyze_image to trigger analysis.", id)}},
 		}, nil
 	}
-	a := item.Analysis
+
+	// If a specific prompt is requested, return just that analysis
+	if promptName != "" {
+		a, exists := item.Analyses[promptName]
+		if !exists {
+			return MCPToolResult{
+				Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("No analysis with prompt %q for image %s. Available: %s", promptName, id, strings.Join(analysisKeys(item.Analyses), ", "))}},
+			}, nil
+		}
+		return MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: formatAnalysis(id, item.Name, promptName, a)}},
+		}, nil
+	}
+
+	// Return all analyses
 	var lines []string
-	lines = append(lines, fmt.Sprintf("Vision analysis for %s (%s):", id, item.Name))
+	lines = append(lines, fmt.Sprintf("Vision analyses for %s (%s):", id, item.Name))
+	for _, pn := range analysisKeysSorted(item.Analyses) {
+		a := item.Analyses[pn]
+		lines = append(lines, "")
+		lines = append(lines, formatAnalysis(id, item.Name, pn, a))
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
+}
+
+func mcpAnalyzeImage(id, promptName string) (interface{}, *MCPError) {
+	item, ok := findItem(id)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "item not found"}
+	}
+	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
+		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
+	}
+	if !visionEnabled {
+		return nil, &MCPError{Code: -32603, Message: "vision processing is disabled"}
+	}
+	prompt, ok := getPrompt(promptName)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: fmt.Sprintf("prompt %q not found. Use list_prompts to see available prompts.", promptName)}
+	}
+	result, err := analyzeImage(id, prompt.Prompt)
+	if err != nil {
+		return nil, &MCPError{Code: -32603, Message: "analysis failed: " + err.Error()}
+	}
+	updateItem(id, func(it *Item) bool {
+		if it.Analyses == nil {
+			it.Analyses = make(map[string]*ItemAnalysis)
+		}
+		it.Analyses[promptName] = &ItemAnalysis{
+			Status:      "complete",
+			Text:        result.Text,
+			Description: result.Description,
+			Backend:     visionModel,
+			PromptName:  promptName,
+			ProcessedAt: time.Now(),
+		}
+		return true
+	})
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Analysis complete for %s [%s]:", id, promptName))
+	if result.Description != "" {
+		lines = append(lines, fmt.Sprintf("  Description: %s", result.Description))
+	}
+	if result.Text != "" {
+		lines = append(lines, "  Extracted text:")
+		lines = append(lines, result.Text)
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
+}
+
+func mcpListPrompts() (interface{}, *MCPError) {
+	list := listPromptsSorted()
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Available vision prompts (%d):", len(list)))
+	for _, p := range list {
+		tag := ""
+		if p.BuiltIn {
+			tag = " [built-in]"
+		}
+		lines = append(lines, fmt.Sprintf("  %s%s: %s", p.Name, tag, p.Description))
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
+}
+
+// formatAnalysis formats a single analysis for MCP text output
+func formatAnalysis(id, name, promptName string, a *ItemAnalysis) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("[%s] %s (%s):", promptName, id, name))
 	lines = append(lines, fmt.Sprintf("  Status: %s", a.Status))
 	lines = append(lines, fmt.Sprintf("  Backend: %s", a.Backend))
 	if a.Description != "" {
@@ -633,48 +749,23 @@ func mcpDescribeImage(id string) (interface{}, *MCPError) {
 	if a.Error != "" {
 		lines = append(lines, fmt.Sprintf("  Error: %s", a.Error))
 	}
-	return MCPToolResult{
-		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
-	}, nil
+	return strings.Join(lines, "\n")
 }
 
-func mcpAnalyzeImage(id string) (interface{}, *MCPError) {
-	item, ok := findItem(id)
-	if !ok {
-		return nil, &MCPError{Code: -32602, Message: "item not found"}
+// analysisKeys returns unsorted keys from an analyses map
+func analysisKeys(m map[string]*ItemAnalysis) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
-	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
-		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
-	}
-	if !visionEnabled {
-		return nil, &MCPError{Code: -32603, Message: "vision processing is disabled"}
-	}
-	result, err := analyzeImage(id)
-	if err != nil {
-		return nil, &MCPError{Code: -32603, Message: "analysis failed: " + err.Error()}
-	}
-	updateItem(id, func(it *Item) bool {
-		it.Analysis = &ItemAnalysis{
-			Status:      "complete",
-			Text:        result.Text,
-			Description: result.Description,
-			Backend:     visionModel,
-			ProcessedAt: time.Now(),
-		}
-		return true
-	})
-	var lines []string
-	lines = append(lines, fmt.Sprintf("Analysis complete for %s:", id))
-	if result.Description != "" {
-		lines = append(lines, fmt.Sprintf("  Description: %s", result.Description))
-	}
-	if result.Text != "" {
-		lines = append(lines, "  Extracted text:")
-		lines = append(lines, result.Text)
-	}
-	return MCPToolResult{
-		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
-	}, nil
+	return keys
+}
+
+// analysisKeysSorted returns sorted keys from an analyses map
+func analysisKeysSorted(m map[string]*ItemAnalysis) []string {
+	keys := analysisKeys(m)
+	sort.Strings(keys)
+	return keys
 }
 
 func writeMCPResult(w http.ResponseWriter, id interface{}, result interface{}) {

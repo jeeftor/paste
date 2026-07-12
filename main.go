@@ -68,22 +68,23 @@ type ItemAnalysis struct {
 	Text        string    `json:"text,omitempty"`
 	Description string    `json:"description,omitempty"`
 	Backend     string    `json:"backend,omitempty"`
+	PromptName  string    `json:"prompt_name,omitempty"`
 	ProcessedAt time.Time `json:"processed_at,omitempty"`
 	Error       string    `json:"error,omitempty"`
 }
 
 type Item struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
-	Type       string       `json:"type"` // "text" or "file"
-	MimeType   string       `json:"mime_type,omitempty"`
-	Size       int64        `json:"size"`
-	Created    time.Time    `json:"created"`
-	Expires    time.Time    `json:"expires"`
-	TTL        string       `json:"ttl"`
-	Persistent bool         `json:"persistent"`
-	Analysis   *ItemAnalysis `json:"analysis,omitempty"`
-	Content    string       `json:"content,omitempty"` // for text items in API responses
+	ID        string                    `json:"id"`
+	Name      string                    `json:"name"`
+	Type      string                    `json:"type"` // "text" or "file"
+	MimeType  string                    `json:"mime_type,omitempty"`
+	Size      int64                     `json:"size"`
+	Created   time.Time                 `json:"created"`
+	Expires   time.Time                 `json:"expires"`
+	TTL       string                    `json:"ttl"`
+	Persistent bool                     `json:"persistent"`
+	Analyses  map[string]*ItemAnalysis  `json:"analyses,omitempty"` // keyed by prompt name
+	Content   string                    `json:"content,omitempty"`  // for text items in API responses
 }
 
 type Metadata struct {
@@ -116,6 +117,7 @@ func main() {
 	}
 
 	loadMetadata()
+	initPrompts()
 	cleanupOrphanedMetadata()
 
 	// Start expiry sweeper
@@ -137,6 +139,8 @@ func main() {
 	mux.HandleFunc("/api/files", apiFilesHandler)
 	mux.HandleFunc("/api/files/", apiFileHandler)
 	mux.HandleFunc("/api/analyze/", apiAnalyzeHandler)
+	mux.HandleFunc("/api/prompts", apiPromptsHandler)
+	mux.HandleFunc("/api/prompts/", apiPromptHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)
 	mux.HandleFunc("/api/text/", apiTextItemHandler)
 	mux.HandleFunc("/api/upload", apiUploadHandler)
@@ -462,8 +466,8 @@ func apiFilesHandler(w http.ResponseWriter, r *http.Request) {
 			"persistent": item.Persistent,
 			"url":        fmt.Sprintf("%s/%s/%s", baseURL, itemTypePath(item.Type), item.ID),
 		}
-		if item.Analysis != nil {
-			entry["analysis"] = item.Analysis
+		if item.Analyses != nil && len(item.Analyses) > 0 {
+			entry["analyses"] = item.Analyses
 		}
 		list[i] = entry
 	}

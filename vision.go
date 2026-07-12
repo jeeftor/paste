@@ -14,23 +14,11 @@ import (
 	"time"
 )
 
-const visionPrompt = `Analyze this image and extract its content. Return a JSON object with this exact structure:
-{
-  "image_type": "terminal|code|screenshot|document|diagram|photo|other",
-  "text": "all visible text extracted verbatim, preserving structure and line breaks",
-  "description": "brief 1-2 sentence description of what the image shows"
-}
-For terminal screenshots: extract all text including commands, output, and errors.
-For code screenshots: extract the code preserving indentation, identify the language.
-For documents: OCR the text preserving layout.
-For diagrams/photos: describe what's shown and extract any visible text.
-Return ONLY the JSON object, no other text.`
-
 // visionChatRequest is the OpenAI-compatible chat completion request
 type visionChatRequest struct {
-	Model     string             `json:"model"`
+	Model     string              `json:"model"`
 	Messages  []visionChatMessage `json:"messages"`
-	MaxTokens int                `json:"max_tokens"`
+	MaxTokens int                 `json:"max_tokens"`
 }
 
 type visionChatMessage struct {
@@ -39,9 +27,9 @@ type visionChatMessage struct {
 }
 
 type visionContent struct {
-	Type     string            `json:"type"`
-	Text     string            `json:"text,omitempty"`
-	ImageURL *visionImageURL   `json:"image_url,omitempty"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	ImageURL  *visionImageURL `json:"image_url,omitempty"`
 }
 
 type visionImageURL struct {
@@ -65,26 +53,44 @@ type visionAnalysisResult struct {
 	Description string `json:"description"`
 }
 
-// analyzeImageAsync runs vision analysis in a background goroutine.
-// It marks the item as "pending", then updates it to "complete" or "failed".
+// analyzeImageAsync runs vision analysis in a background goroutine using the default prompt.
 func analyzeImageAsync(itemID string) {
+	analyzeImageAsyncWithPrompt(itemID, "default")
+}
+
+// analyzeImageAsyncWithPrompt runs vision analysis with a specific prompt in the background.
+func analyzeImageAsyncWithPrompt(itemID, promptName string) {
+	prompt, ok := getPrompt(promptName)
+	if !ok {
+		log.Printf("Vision analysis: prompt %q not found for item %s", promptName, itemID)
+		return
+	}
+
 	// Mark as pending
 	updateItem(itemID, func(item *Item) bool {
-		item.Analysis = &ItemAnalysis{
-			Status:  "pending",
-			Backend: visionModel,
+		if item.Analyses == nil {
+			item.Analyses = make(map[string]*ItemAnalysis)
+		}
+		item.Analyses[promptName] = &ItemAnalysis{
+			Status:     "pending",
+			Backend:    visionModel,
+			PromptName: promptName,
 		}
 		return true
 	})
 
-	result, err := analyzeImage(itemID)
+	result, err := analyzeImage(itemID, prompt.Prompt)
 	if err != nil {
-		log.Printf("Vision analysis failed for %s: %v", itemID, err)
+		log.Printf("Vision analysis failed for %s [%s]: %v", itemID, promptName, err)
 		updateItem(itemID, func(item *Item) bool {
-			item.Analysis = &ItemAnalysis{
-				Status:  "failed",
-				Backend: visionModel,
-				Error:   err.Error(),
+			if item.Analyses == nil {
+				item.Analyses = make(map[string]*ItemAnalysis)
+			}
+			item.Analyses[promptName] = &ItemAnalysis{
+				Status:     "failed",
+				Backend:    visionModel,
+				PromptName: promptName,
+				Error:      err.Error(),
 			}
 			return true
 		})
@@ -92,27 +98,31 @@ func analyzeImageAsync(itemID string) {
 	}
 
 	updateItem(itemID, func(item *Item) bool {
-		item.Analysis = &ItemAnalysis{
+		if item.Analyses == nil {
+			item.Analyses = make(map[string]*ItemAnalysis)
+		}
+		item.Analyses[promptName] = &ItemAnalysis{
 			Status:      "complete",
 			Text:        result.Text,
 			Description: result.Description,
 			Backend:     visionModel,
+			PromptName:  promptName,
 			ProcessedAt: time.Now(),
 		}
 		return true
 	})
-	log.Printf("Vision analysis complete for %s: type=%s, %d chars extracted", itemID, result.ImageType, len(result.Text))
+	log.Printf("Vision analysis complete for %s [%s]: type=%s, %d chars extracted",
+		itemID, promptName, result.ImageType, len(result.Text))
 }
 
-// analyzeImage reads the image file, sends it to the vision model, and parses the response.
-func analyzeImage(itemID string) (*visionAnalysisResult, error) {
+// analyzeImage reads the image file, sends it to the vision model with the given prompt, and parses the response.
+func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 	fpath := filepath.Join(dataDir, fileDir, itemID)
 	imgData, err := os.ReadFile(fpath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read image file: %w", err)
 	}
 
-	// Limit image size to 10MB for vision processing (avoid huge base64 payloads)
 	const maxVisionImageSize = 10 * 1024 * 1024
 	if len(imgData) > maxVisionImageSize {
 		return nil, fmt.Errorf("image too large for vision processing (%d bytes, max %d)", len(imgData), maxVisionImageSize)
@@ -127,7 +137,7 @@ func analyzeImage(itemID string) (*visionAnalysisResult, error) {
 			{
 				Role: "user",
 				Content: []visionContent{
-					{Type: "text", Text: visionPrompt},
+					{Type: "text", Text: promptText},
 					{Type: "image_url", ImageURL: &visionImageURL{URL: dataURL}},
 				},
 			},
@@ -172,13 +182,10 @@ func analyzeImage(itemID string) (*visionAnalysisResult, error) {
 	}
 
 	content := chatResp.Choices[0].Message.Content
-
-	// Parse the JSON response (model might wrap it in markdown code blocks)
 	content = stripMarkdownCodeFence(content)
 
 	var result visionAnalysisResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		// If JSON parsing fails, use the raw content as text
 		return &visionAnalysisResult{
 			ImageType:   "other",
 			Text:        content,
@@ -192,18 +199,16 @@ func analyzeImage(itemID string) (*visionAnalysisResult, error) {
 // stripMarkdownCodeFence removes ```json ... ``` wrapping if present
 func stripMarkdownCodeFence(s string) string {
 	s = strings.TrimSpace(s)
-	// Remove leading ```json or ```
 	if strings.HasPrefix(s, "```json") {
 		s = strings.TrimPrefix(s, "```json")
 	} else if strings.HasPrefix(s, "```") {
 		s = strings.TrimPrefix(s, "```")
 	}
-	// Remove trailing ```
 	s = strings.TrimSuffix(s, "```")
 	return strings.TrimSpace(s)
 }
 
-// apiAnalyzeHandler handles POST /api/analyze/{id} to manually trigger or re-trigger analysis
+// apiAnalyzeHandler handles POST /api/analyze/{id}?prompt={name}
 func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -214,6 +219,12 @@ func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
 		return
+	}
+
+	// Optional prompt parameter (defaults to "default")
+	promptName := r.URL.Query().Get("prompt")
+	if promptName == "" {
+		promptName = "default"
 	}
 
 	item, ok := findItem(id)
@@ -232,14 +243,24 @@ func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	prompt, ok := getPrompt(promptName)
+	if !ok {
+		http.Error(w, fmt.Sprintf(`{"error":"prompt %q not found"}`, promptName), http.StatusBadRequest)
+		return
+	}
+
 	// Run analysis synchronously for manual trigger
-	result, err := analyzeImage(id)
+	result, err := analyzeImage(id, prompt.Prompt)
 	if err != nil {
 		updateItem(id, func(it *Item) bool {
-			it.Analysis = &ItemAnalysis{
-				Status:  "failed",
-				Backend: visionModel,
-				Error:   err.Error(),
+			if it.Analyses == nil {
+				it.Analyses = make(map[string]*ItemAnalysis)
+			}
+			it.Analyses[promptName] = &ItemAnalysis{
+				Status:     "failed",
+				Backend:    visionModel,
+				PromptName: promptName,
+				Error:      err.Error(),
 			}
 			return true
 		})
@@ -248,20 +269,24 @@ func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updateItem(id, func(it *Item) bool {
-		it.Analysis = &ItemAnalysis{
+		if it.Analyses == nil {
+			it.Analyses = make(map[string]*ItemAnalysis)
+		}
+		it.Analyses[promptName] = &ItemAnalysis{
 			Status:      "complete",
 			Text:        result.Text,
 			Description: result.Description,
 			Backend:     visionModel,
+			PromptName:  promptName,
 			ProcessedAt: time.Now(),
 		}
 		return true
 	})
 
-	// Re-read the item to get the updated analysis
 	updated, _ := findItem(id)
 	writeJSON(w, map[string]interface{}{
 		"id":       id,
-		"analysis": updated.Analysis,
+		"prompt":   promptName,
+		"analysis": updated.Analyses[promptName],
 	})
 }

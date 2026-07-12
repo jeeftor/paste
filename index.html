@@ -1080,12 +1080,60 @@ body {
     <div class="api-card">
       <div class="api-card-header">
         <span class="api-method POST">POST</span>
-        <span class="api-path">/api/analyze/{id}</span>
-        <span class="api-desc">Trigger vision analysis on an image (OCR + description)</span>
+        <span class="api-path">/api/analyze/{id}?prompt={name}</span>
+        <span class="api-desc">Trigger vision analysis on an image with optional prompt</span>
       </div>
       <div class="api-card-body">
         <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
-        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="url" id="restUrl11"></span>/api/analyze/<span class="json-key">{id}</span></div>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="url" id="restUrl11"></span>/api/analyze/<span class="json-key">{id}</span>?prompt=terminal</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/prompts</span>
+        <span class="api-desc">List all vision prompts (built-in and custom)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl12"></span>/api/prompts</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/prompts</span>
+        <span class="api-desc">Create a custom vision prompt</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="url" id="restUrl13"></span>/api/prompts <span class="flag">-H</span> 'Content-Type: application/json' <span class="flag">-d</span> '{"name":"my_prompt","description":"...","prompt":"..."}'</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method PUT">PUT</span>
+        <span class="api-path">/api/prompts/{name}</span>
+        <span class="api-desc">Update a vision prompt (built-in or custom)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> PUT <span class="url" id="restUrl14"></span>/api/prompts/<span class="json-key">{name}</span> <span class="flag">-H</span> 'Content-Type: application/json' <span class="flag">-d</span> '{"prompt":"..."}'</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method DELETE">DELETE</span>
+        <span class="api-path">/api/prompts/{name}</span>
+        <span class="api-desc">Delete a custom vision prompt (built-ins cannot be deleted)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> DELETE <span class="url" id="restUrl15"></span>/api/prompts/<span class="json-key">{name}</span></div>
       </div>
     </div>
 
@@ -1215,14 +1263,20 @@ body {
 
     <div class="mcp-tool-card">
       <div class="mcp-tool-name">describe_image</div>
-      <div class="mcp-tool-desc">Get the vision analysis (extracted text and description) for an image item.</div>
-      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the image item</div>
+      <div class="mcp-tool-desc">Get the vision analysis (extracted text and description) for an image item. Optionally specify a prompt name to get a specific analysis.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required), <span class="param-name">prompt</span> (<span class="param-type">string</span>, optional) — prompt name; if omitted, returns all analyses</div>
     </div>
 
     <div class="mcp-tool-card">
       <div class="mcp-tool-name">analyze_image</div>
       <div class="mcp-tool-desc">Trigger or re-trigger vision analysis for an image item. Extracts text and generates a description using the configured vision model.</div>
-      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the image item</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required), <span class="param-name">prompt</span> (<span class="param-type">string</span>, optional) — prompt name (default, terminal, code, document, diagram, or custom)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">list_prompts</div>
+      <div class="mcp-tool-desc">List all available vision prompt templates (built-in and custom).</div>
+      <div class="mcp-tool-params">Parameters: none</div>
     </div>
   </div>
 </div>
@@ -1289,7 +1343,7 @@ function switchTab(tab, ev) {
   // REST tab
   const restBase = document.getElementById('restBaseUrl');
   if (restBase) restBase.textContent = BASE;
-  for (let i = 1; i <= 11; i++) {
+  for (let i = 1; i <= 15; i++) {
     const el = document.getElementById('restUrl' + i);
     if (el) el.textContent = BASE;
   }
@@ -2057,18 +2111,25 @@ function renderItemCard(item, isPersistent) {
   // Vision analysis section (for images)
   let analysisHTML = '';
   if (item.type === 'file' && item.mime_type && item.mime_type.startsWith('image/')) {
-    const a = item.analysis;
-    if (a) {
-      if (a.status === 'pending') {
-        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Analyzing...</div><div class="item-analysis-pending">Vision model processing image...</div></div>`;
-      } else if (a.status === 'complete') {
-        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Vision Analysis <span class="badge">${a.backend || ''}</span></div>`;
-        if (a.description) analysisHTML += `<div class="item-analysis-desc">${escapeHtml(a.description)}</div>`;
-        if (a.text) analysisHTML += `<div class="item-analysis-text">${escapeHtml(a.text)}</div>`;
-        analysisHTML += `</div>`;
-      } else if (a.status === 'failed') {
-        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Analysis Failed</div><div class="item-analysis-error">${escapeHtml(a.error || 'Unknown error')}</div></div>`;
+    const analyses = item.analyses || {};
+    const promptNames = Object.keys(analyses);
+    const hasPending = promptNames.some(n => analyses[n].status === 'pending');
+
+    if (promptNames.length > 0) {
+      analysisHTML = `<div class="item-analysis">`;
+      for (const pn of promptNames.sort()) {
+        const a = analyses[pn];
+        if (a.status === 'pending') {
+          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] Analyzing...</div><div class="item-analysis-pending">Vision model processing image...</div>`;
+        } else if (a.status === 'complete') {
+          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] <span class="badge">${a.backend || ''}</span></div>`;
+          if (a.description) analysisHTML += `<div class="item-analysis-desc">${escapeHtml(a.description)}</div>`;
+          if (a.text) analysisHTML += `<div class="item-analysis-text">${escapeHtml(a.text)}</div>`;
+        } else if (a.status === 'failed') {
+          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] Failed</div><div class="item-analysis-error">${escapeHtml(a.error || 'Unknown error')}</div>`;
+        }
       }
+      analysisHTML += `</div>`;
     }
   }
 
@@ -2144,12 +2205,56 @@ function unpersistItem(id, name) {
 }
 
 function reanalyzeImage(id) {
-  showToast('Re-analyzing image...');
-  fetch(`${API}/analyze/${id}`, { method: 'POST' })
+  // Fetch available prompts and show a selector
+  fetch(`${API}/prompts`)
+    .then(r => r.json())
+    .then(data => {
+      const prompts = data.prompts || [];
+      const select = document.createElement('select');
+      select.style.cssText = 'display:block;margin:8px 0;padding:4px;font-size:14px;width:100%';
+      prompts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = `${p.name}${p.built_in ? ' (built-in)' : ''} — ${p.description}`;
+        select.appendChild(opt);
+      });
+
+      const btn = document.createElement('button');
+      btn.textContent = 'Analyze';
+      btn.className = 'btn btn-primary';
+      btn.style.cssText = 'margin-top:8px;width:100%';
+
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:400px;width:90%';
+      const title = document.createElement('h3');
+      title.textContent = 'Select Vision Prompt';
+      title.style.cssText = 'margin:0 0 12px 0;font-size:16px';
+      box.appendChild(title);
+      box.appendChild(select);
+      box.appendChild(btn);
+      modal.appendChild(box);
+      document.body.appendChild(modal);
+
+      const close = () => modal.remove();
+      modal.onclick = (e) => { if (e.target === modal) close(); };
+      btn.onclick = () => {
+        const promptName = select.value;
+        close();
+        doAnalyze(id, promptName);
+      };
+    })
+    .catch(err => showToast('Failed to load prompts: ' + err, true));
+}
+
+function doAnalyze(id, promptName) {
+  showToast(`Analyzing with [${promptName}]...`);
+  fetch(`${API}/analyze/${id}?prompt=${encodeURIComponent(promptName)}`, { method: 'POST' })
     .then(r => r.json())
     .then(data => {
       if (data.error) { showToast(data.error, true); return; }
-      showToast('Analysis complete');
+      showToast(`Analysis complete [${promptName}]`);
       loadItems();
       if (document.getElementById('tab-persistent').classList.contains('active')) {
         loadPersistentItems();
@@ -2176,8 +2281,8 @@ setInterval(() => {
 
 // Fast refresh (5s) when there are pending vision analyses
 setInterval(() => {
-  const cards = document.querySelectorAll('.item-analysis-pending');
-  if (cards.length > 0) {
+  const pending = document.querySelectorAll('.item-analysis-pending');
+  if (pending.length > 0) {
     loadItems();
     if (document.getElementById('tab-persistent').classList.contains('active')) {
       loadPersistentItems();
