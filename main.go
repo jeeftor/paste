@@ -56,17 +56,34 @@ var (
 	metaMu   sync.RWMutex
 )
 
+// Vision processing configuration
+var (
+	visionEnabled  bool
+	visionEndpoint string
+	visionModel    string
+)
+
+type ItemAnalysis struct {
+	Status      string    `json:"status"`       // "pending", "complete", "failed"
+	Text        string    `json:"text,omitempty"`
+	Description string    `json:"description,omitempty"`
+	Backend     string    `json:"backend,omitempty"`
+	ProcessedAt time.Time `json:"processed_at,omitempty"`
+	Error       string    `json:"error,omitempty"`
+}
+
 type Item struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Type       string    `json:"type"` // "text" or "file"
-	MimeType   string    `json:"mime_type,omitempty"`
-	Size       int64     `json:"size"`
-	Created    time.Time `json:"created"`
-	Expires    time.Time `json:"expires"`
-	TTL        string    `json:"ttl"`
-	Persistent bool      `json:"persistent"`
-	Content    string    `json:"content,omitempty"` // for text items in API responses
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Type       string       `json:"type"` // "text" or "file"
+	MimeType   string       `json:"mime_type,omitempty"`
+	Size       int64        `json:"size"`
+	Created    time.Time    `json:"created"`
+	Expires    time.Time    `json:"expires"`
+	TTL        string       `json:"ttl"`
+	Persistent bool         `json:"persistent"`
+	Analysis   *ItemAnalysis `json:"analysis,omitempty"`
+	Content    string       `json:"content,omitempty"` // for text items in API responses
 }
 
 type Metadata struct {
@@ -86,6 +103,11 @@ func main() {
 		}
 	}
 	maxUploadBytes = int64(maxUploadMB) * 1024 * 1024
+
+	// Vision processing config
+	visionEndpoint = envOr("VISION_ENDPOINT", "http://localhost:13305/v1/chat/completions")
+	visionModel = envOr("VISION_MODEL", "Qwen3-VL-4B-Instruct-GGUF")
+	visionEnabled = envOr("VISION_ENABLED", "true") == "true"
 
 	for _, d := range []string{textDir, fileDir, chunkDir} {
 		if err := os.MkdirAll(filepath.Join(dataDir, d), 0755); err != nil {
@@ -114,6 +136,7 @@ func main() {
 	// REST API
 	mux.HandleFunc("/api/files", apiFilesHandler)
 	mux.HandleFunc("/api/files/", apiFileHandler)
+	mux.HandleFunc("/api/analyze/", apiAnalyzeHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)
 	mux.HandleFunc("/api/text/", apiTextItemHandler)
 	mux.HandleFunc("/api/upload", apiUploadHandler)
@@ -427,7 +450,7 @@ func apiFilesHandler(w http.ResponseWriter, r *http.Request) {
 	// Strip content from list response
 	list := make([]map[string]interface{}, len(items))
 	for i, item := range items {
-		list[i] = map[string]interface{}{
+		entry := map[string]interface{}{
 			"id":         item.ID,
 			"name":       item.Name,
 			"type":       item.Type,
@@ -439,6 +462,10 @@ func apiFilesHandler(w http.ResponseWriter, r *http.Request) {
 			"persistent": item.Persistent,
 			"url":        fmt.Sprintf("%s/%s/%s", baseURL, itemTypePath(item.Type), item.ID),
 		}
+		if item.Analysis != nil {
+			entry["analysis"] = item.Analysis
+		}
+		list[i] = entry
 	}
 	writeJSON(w, map[string]interface{}{"items": list})
 }
@@ -685,6 +712,11 @@ func apiUploadHandler(w http.ResponseWriter, r *http.Request) {
 		TTL:      ttlString(ttl),
 	}
 	addItem(item)
+
+	// Auto-analyze images with vision model
+	if visionEnabled && strings.HasPrefix(mimeType, "image/") {
+		go analyzeImageAsync(id)
+	}
 
 	writeJSON(w, map[string]interface{}{
 		"id":   id,
@@ -984,6 +1016,11 @@ func apiUploadCompleteHandler(w http.ResponseWriter, r *http.Request) {
 		TTL:      ttlString(ttl),
 	}
 	addItem(item)
+
+	// Auto-analyze images with vision model
+	if visionEnabled && strings.HasPrefix(mimeType, "image/") {
+		go analyzeImageAsync(id)
+	}
 
 	writeJSON(w, map[string]interface{}{
 		"id":   id,

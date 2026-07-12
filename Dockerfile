@@ -19,6 +19,9 @@ ENV PORT=8080
 ENV DATA_DIR=/data
 ENV BASE_URL=http://localhost:8080
 ENV MAX_UPLOAD_MB=2048
+ENV VISION_ENABLED=true
+ENV VISION_ENDPOINT=http://localhost:13305/v1/chat/completions
+ENV VISION_MODEL=Qwen3-VL-4B-Instruct-GGUF
 
 RUN mkdir -p /data
 

@@ -442,6 +442,49 @@ body {
   font-size: 13px;
   color: var(--text-muted);
 }
+/* Vision analysis section on item cards */
+.item-analysis {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.item-analysis-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.item-analysis-text {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  background: var(--bg);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.item-analysis-pending {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.item-analysis-error {
+  color: var(--danger);
+}
+.item-analysis-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 4px;
+  font-style: italic;
+}
 .items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1036,6 +1079,18 @@ body {
 
     <div class="api-card">
       <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/analyze/{id}</span>
+        <span class="api-desc">Trigger vision analysis on an image (OCR + description)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="url" id="restUrl11"></span>/api/analyze/<span class="json-key">{id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
         <span class="api-method GET">GET</span>
         <span class="api-path">/f/{id}</span>
         <span class="api-desc">Direct file access (in browser)</span>
@@ -1157,6 +1212,18 @@ body {
       <div class="mcp-tool-desc">Pin or unpin an item to keep it forever (persistent items never expire).</div>
       <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required), <span class="param-name">persistent</span> (<span class="param-type">boolean</span>, required) — true to pin, false to unpin</div>
     </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">describe_image</div>
+      <div class="mcp-tool-desc">Get the vision analysis (extracted text and description) for an image item.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the image item</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">analyze_image</div>
+      <div class="mcp-tool-desc">Trigger or re-trigger vision analysis for an image item. Extracts text and generates a description using the configured vision model.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">id</span> (<span class="param-type">string</span>, required) — The unique ID of the image item</div>
+    </div>
   </div>
 </div>
 
@@ -1205,6 +1272,7 @@ const ICONS = {
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg>',
+  scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><line x1="7" y1="12" x2="17" y2="12"></line></svg>',
 };
 
 // --- Tab switching ---
@@ -1221,7 +1289,7 @@ function switchTab(tab, ev) {
   // REST tab
   const restBase = document.getElementById('restBaseUrl');
   if (restBase) restBase.textContent = BASE;
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 11; i++) {
     const el = document.getElementById('restUrl' + i);
     if (el) el.textContent = BASE;
   }
@@ -1972,6 +2040,7 @@ function renderItemCard(item, isPersistent) {
       <button class="icon-btn" data-tooltip="Copy image to clipboard" onclick="copyImageToClipboard('${item.id}')">${ICONS.image}</button>
       <button class="icon-btn" data-tooltip="Share" onclick="shareItem('${item.id}', 'file', '${escapeHtml(item.name)}')">${ICONS.share}</button>
       ${pinBtn}
+      <button class="icon-btn" data-tooltip="Re-analyze with vision model" onclick="reanalyzeImage('${item.id}')">${ICONS.scan}</button>
       <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
       <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
     `;
@@ -1983,6 +2052,24 @@ function renderItemCard(item, isPersistent) {
       <button class="icon-btn" data-tooltip="Copy URL" onclick="copyUrl('${item.id}')">${ICONS.link}</button>
       <button class="icon-btn danger" data-tooltip="Delete" onclick="deleteItem('${item.id}', '${escapeHtml(item.name)}')">${ICONS.trash}</button>
     `;
+  }
+
+  // Vision analysis section (for images)
+  let analysisHTML = '';
+  if (item.type === 'file' && item.mime_type && item.mime_type.startsWith('image/')) {
+    const a = item.analysis;
+    if (a) {
+      if (a.status === 'pending') {
+        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Analyzing...</div><div class="item-analysis-pending">Vision model processing image...</div></div>`;
+      } else if (a.status === 'complete') {
+        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Vision Analysis <span class="badge">${a.backend || ''}</span></div>`;
+        if (a.description) analysisHTML += `<div class="item-analysis-desc">${escapeHtml(a.description)}</div>`;
+        if (a.text) analysisHTML += `<div class="item-analysis-text">${escapeHtml(a.text)}</div>`;
+        analysisHTML += `</div>`;
+      } else if (a.status === 'failed') {
+        analysisHTML = `<div class="item-analysis"><div class="item-analysis-label">${ICONS.scan} Analysis Failed</div><div class="item-analysis-error">${escapeHtml(a.error || 'Unknown error')}</div></div>`;
+      }
+    }
   }
 
   return `
@@ -1998,6 +2085,7 @@ function renderItemCard(item, isPersistent) {
         </div>
       </div>
       <div class="item-actions">${actions}</div>
+      ${analysisHTML}
     </div>
   `;
 }
@@ -2055,6 +2143,21 @@ function unpersistItem(id, name) {
     .catch(err => showToast('Failed to unpin: ' + err, true));
 }
 
+function reanalyzeImage(id) {
+  showToast('Re-analyzing image...');
+  fetch(`${API}/analyze/${id}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { showToast(data.error, true); return; }
+      showToast('Analysis complete');
+      loadItems();
+      if (document.getElementById('tab-persistent').classList.contains('active')) {
+        loadPersistentItems();
+      }
+    })
+    .catch(err => showToast('Analysis failed: ' + err, true));
+}
+
 function showToast(msg, isError) {
   const toast = document.createElement('div');
   toast.className = 'toast' + (isError ? ' error' : '');
@@ -2070,6 +2173,17 @@ setInterval(() => {
     loadPersistentItems();
   }
 }, 30000);
+
+// Fast refresh (5s) when there are pending vision analyses
+setInterval(() => {
+  const cards = document.querySelectorAll('.item-analysis-pending');
+  if (cards.length > 0) {
+    loadItems();
+    if (document.getElementById('tab-persistent').classList.contains('active')) {
+      loadPersistentItems();
+    }
+  }
+}, 5000);
 
 // Initial load
 loadItems();

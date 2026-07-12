@@ -190,6 +190,34 @@ var mcpTools = []MCPTool{
 			"required": []string{"id", "persistent"},
 		},
 	},
+	{
+		Name:        "describe_image",
+		Description: "Get the vision analysis (extracted text and description) for an image item. Returns the stored analysis if available.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{
+					"type":        "string",
+					"description": "The unique ID of the image item",
+				},
+			},
+			"required": []string{"id"},
+		},
+	},
+	{
+		Name:        "analyze_image",
+		Description: "Trigger or re-trigger vision analysis for an image item. Extracts text and generates a description using the configured vision model.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{
+					"type":        "string",
+					"description": "The unique ID of the image item",
+				},
+			},
+			"required": []string{"id"},
+		},
+	},
 }
 
 func mcpHandler(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +359,20 @@ func handleMCPToolCall(name string, args map[string]any) (interface{}, *MCPError
 		}
 		persistent, _ := args["persistent"].(bool)
 		return mcpPersistFile(id, persistent)
+
+	case "describe_image":
+		id, ok := args["id"].(string)
+		if !ok || id == "" {
+			return nil, &MCPError{Code: -32602, Message: "id is required"}
+		}
+		return mcpDescribeImage(id)
+
+	case "analyze_image":
+		id, ok := args["id"].(string)
+		if !ok || id == "" {
+			return nil, &MCPError{Code: -32602, Message: "id is required"}
+		}
+		return mcpAnalyzeImage(id)
 
 	default:
 		return nil, &MCPError{Code: -32601, Message: "Unknown tool: " + name}
@@ -560,6 +602,78 @@ func mcpPersistFile(id string, persistent bool) (interface{}, *MCPError) {
 	}
 	return MCPToolResult{
 		Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("%s item %s", action, id)}},
+	}, nil
+}
+
+func mcpDescribeImage(id string) (interface{}, *MCPError) {
+	item, ok := findItem(id)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "item not found"}
+	}
+	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
+		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
+	}
+	if item.Analysis == nil {
+		return MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("No vision analysis available for image %s. Use analyze_image to trigger analysis.", id)}},
+		}, nil
+	}
+	a := item.Analysis
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Vision analysis for %s (%s):", id, item.Name))
+	lines = append(lines, fmt.Sprintf("  Status: %s", a.Status))
+	lines = append(lines, fmt.Sprintf("  Backend: %s", a.Backend))
+	if a.Description != "" {
+		lines = append(lines, fmt.Sprintf("  Description: %s", a.Description))
+	}
+	if a.Text != "" {
+		lines = append(lines, "  Extracted text:")
+		lines = append(lines, a.Text)
+	}
+	if a.Error != "" {
+		lines = append(lines, fmt.Sprintf("  Error: %s", a.Error))
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
+}
+
+func mcpAnalyzeImage(id string) (interface{}, *MCPError) {
+	item, ok := findItem(id)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "item not found"}
+	}
+	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
+		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
+	}
+	if !visionEnabled {
+		return nil, &MCPError{Code: -32603, Message: "vision processing is disabled"}
+	}
+	result, err := analyzeImage(id)
+	if err != nil {
+		return nil, &MCPError{Code: -32603, Message: "analysis failed: " + err.Error()}
+	}
+	updateItem(id, func(it *Item) bool {
+		it.Analysis = &ItemAnalysis{
+			Status:      "complete",
+			Text:        result.Text,
+			Description: result.Description,
+			Backend:     visionModel,
+			ProcessedAt: time.Now(),
+		}
+		return true
+	})
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Analysis complete for %s:", id))
+	if result.Description != "" {
+		lines = append(lines, fmt.Sprintf("  Description: %s", result.Description))
+	}
+	if result.Text != "" {
+		lines = append(lines, "  Extracted text:")
+		lines = append(lines, result.Text)
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
 	}, nil
 }
 
