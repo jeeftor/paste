@@ -16,7 +16,7 @@ Self-hosted paste/file-drop service with web UI, REST API, MCP server, and AI vi
 - **Files on disk** — plain files, directly readable by agents with filesystem access
 - **Unique IDs** — short 6-character IDs for every item
 - **Single Go binary** — no runtime dependencies
-- **Tested** — 47 tests with 44.6% code coverage
+- **Tested** — 64 tests with 48.8% code coverage
 
 ## Quick Start
 
@@ -30,6 +30,8 @@ docker run -d \
 
 ## Configuration
 
+### Environment Variables
+
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `PORT` | `8080` | HTTP port |
@@ -37,19 +39,30 @@ docker run -d \
 | `BASE_URL` | `http://localhost:8080` | Public URL for generating links |
 | `MAX_UPLOAD_MB` | `100` | Max upload size in MB |
 | `VISION_ENABLED` | `true` | Enable automatic image analysis on upload |
-| `VISION_ENDPOINT` | `http://localhost:13305/v1/chat/completions` | OpenAI-compatible vision LLM endpoint |
-| `VISION_MODEL` | `Qwen3-VL-4B-Instruct-GGUF` | Vision model name to use |
+| `VISION_ENDPOINT` | *(see presets)* | OpenAI-compatible vision LLM endpoint (overrides UI config) |
+| `VISION_MODEL` | *(see presets)* | Vision model name to use (overrides UI config) |
 
-### Vision Backend Setup
+### Vision LLM Configuration
 
-The vision pre-processing feature requires an OpenAI-compatible vision LLM endpoint. The default configuration targets [Lemonade](https://github.com/lemonade-sdk/lemonade) running Qwen3-VL-4B locally on GPU, but any OpenAI-compatible endpoint works:
+The vision endpoint can be configured in two ways:
 
-- **Lemonade** (local GPU, default) — `http://localhost:13305/v1/chat/completions`
-- **Ollama** (local) — `http://localhost:11434/v1/chat/completions`
-- **OpenAI** (cloud) — `https://api.openai.com/v1/chat/completions`
-- **Any OpenAI-compatible server** — just set `VISION_ENDPOINT` and `VISION_MODEL`
+1. **UI Settings Panel** — Click the gear icon in the header to open the Vision LLM Settings modal. Create, edit, and switch between named presets (e.g. "Local Lemonade", "Ollama", "OpenAI"). The active preset is persisted in `{DATA_DIR}/vision_config.json`.
 
-To disable vision entirely, set `VISION_ENABLED=false`.
+2. **Environment Variables** — Set `VISION_ENDPOINT` and/or `VISION_MODEL` to override the UI config. When env vars are set, an "env" preset appears in the UI and is locked as active. This is useful for Docker deployments where you want to lock the config.
+
+**Env vars always win** — if `VISION_ENDPOINT` or `VISION_MODEL` are set, they override any UI configuration. The UI will show a banner indicating env vars are active.
+
+### Built-In Presets
+
+Three presets are pre-configured on first boot:
+
+| Preset | Endpoint | Model | Description |
+|--------|----------|-------|-------------|
+| `lemonade` | `http://localhost:13305/v1/chat/completions` | `Qwen3-VL-4B-Instruct-GGUF` | Local Lemonade (GPU) |
+| `ollama` | `http://localhost:11434/v1/chat/completions` | `llama3.2-vision` | Local Ollama |
+| `openai` | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` | OpenAI cloud (requires API key) |
+
+To disable vision entirely, set `VISION_ENABLED=false` or toggle it off in the UI settings.
 
 ## Vision Pre-Processing
 
@@ -175,6 +188,36 @@ curl /api/health    # → {"status":"ok"}
 curl /api/version   # → {"version":"v1.4.1"}
 ```
 
+### Vision LLM Config
+
+```bash
+# Get current config (active preset, all presets, enabled state, env override status)
+curl /api/config/vision
+
+# Set active preset
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"preset":"ollama"}' \
+  /api/config/vision/active
+
+# Toggle vision enabled/disabled
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"enabled":false}' \
+  /api/config/vision/enabled
+
+# Create a preset
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"name":"my-llm","endpoint":"http://localhost:8080/v1/chat/completions","model":"my-model","api_key":"sk-...","description":"My LLM"}' \
+  /api/config/vision/presets
+
+# Update a preset
+curl -X PUT -H 'Content-Type: application/json' \
+  -d '{"endpoint":"http://new:8080/v1/chat/completions","model":"new-model"}' \
+  /api/config/vision/presets/my-llm
+
+# Delete a preset (cannot delete active or env preset)
+curl -X DELETE /api/config/vision/presets/my-llm
+```
+
 ## MCP Tools
 
 MCP endpoint: `https://paste.example.com/mcp`
@@ -223,6 +266,7 @@ MCP endpoint: `https://paste.example.com/mcp`
 | `{DATA_DIR}/chunks/` | Temporary chunked upload chunks |
 | `{DATA_DIR}/metadata.json` | Item metadata (IDs, names, MIME types, TTL, analyses) |
 | `{DATA_DIR}/prompts.json` | Custom vision prompts (built-in prompts are in code) |
+| `{DATA_DIR}/vision_config.json` | Vision LLM presets and active selection |
 
 ## Development
 

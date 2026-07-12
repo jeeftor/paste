@@ -156,6 +156,11 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	// Add API key from active preset if set
+	if p := getActiveVisionPreset(); p.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
+
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {

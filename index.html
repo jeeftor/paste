@@ -644,6 +644,167 @@ body {
   display: block;
 }
 
+/* Settings panel */
+.settings-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+.settings-btn svg { width: 16px; height: 16px; }
+
+.settings-modal {
+  max-width: 600px;
+}
+.settings-section {
+  margin-bottom: 24px;
+}
+.settings-section h4 {
+  font-size: 14px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.settings-env-banner {
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  color: #ffc107;
+}
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preset-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.preset-item.active {
+  border-color: var(--accent);
+  background: rgba(0, 150, 136, 0.08);
+}
+.preset-radio {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.preset-info {
+  flex: 1;
+  min-width: 0;
+}
+.preset-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.preset-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 2px;
+  word-break: break-all;
+}
+.preset-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.preset-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+.preset-btn.danger:hover { border-color: #f44336; color: #f44336; }
+
+.preset-form {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+  display: none;
+}
+.preset-form.show { display: block; }
+.preset-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.preset-form-row label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.preset-form input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--mono);
+}
+.preset-form input:focus { outline: none; border-color: var(--accent); }
+.preset-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.toggle-row label { font-size: 13px; }
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.toggle-switch.on { background: var(--accent); }
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-switch.on::after { transform: translateX(18px); }
+
 /* Responsive */
 @media (max-width: 600px) {
   .items-grid { grid-template-columns: 1fr; }
@@ -830,6 +991,9 @@ body {
       <option value="30d">Expires in 30 days</option>
       <option value="never">Never expires</option>
     </select>
+    <button class="settings-btn" onclick="openSettings()" data-tooltip="Vision LLM Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
   </div>
 </div>
 
@@ -1293,6 +1457,63 @@ body {
       </div>
     </div>
     <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal settings-modal">
+    <div class="modal-header">
+      <h3>Vision LLM Settings</h3>
+      <button class="icon-btn" data-tooltip="Close" onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="settingsEnvBanner" class="settings-env-banner" style="display:none">
+        Environment variables (VISION_ENDPOINT/VISION_MODEL) are overriding UI configuration. To change settings from the UI, unset these env vars.
+      </div>
+
+      <div class="settings-section">
+        <h4>Vision Processing</h4>
+        <div class="toggle-row">
+          <label>Enable automatic image analysis on upload</label>
+          <div class="toggle-switch" id="visionEnabledToggle" onclick="toggleVisionEnabled()"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>LLM Presets</h4>
+        <div class="preset-list" id="presetList"></div>
+        <button class="btn btn-secondary" style="margin-top:12px;font-size:13px;padding:6px 12px" onclick="showPresetForm()">+ Add Preset</button>
+
+        <div class="preset-form" id="presetForm">
+          <input type="hidden" id="presetFormMode" value="add">
+          <div class="preset-form-row">
+            <label>Name (unique identifier)</label>
+            <input type="text" id="presetFormName" placeholder="my-llm">
+          </div>
+          <div class="preset-form-row">
+            <label>Endpoint URL</label>
+            <input type="text" id="presetFormEndpoint" placeholder="http://localhost:11434/v1/chat/completions">
+          </div>
+          <div class="preset-form-row">
+            <label>Model Name</label>
+            <input type="text" id="presetFormModel" placeholder="llama3.2-vision">
+          </div>
+          <div class="preset-form-row">
+            <label>API Key (optional)</label>
+            <input type="password" id="presetFormApiKey" placeholder="sk-...">
+          </div>
+          <div class="preset-form-row">
+            <label>Description (optional)</label>
+            <input type="text" id="presetFormDesc" placeholder="Local Ollama instance">
+          </div>
+          <div class="preset-form-actions">
+            <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="savePresetForm()">Save</button>
+            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px" onclick="hidePresetForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1949,6 +2170,211 @@ function closeModal() {
   document.getElementById('modal').classList.remove('show');
   document.getElementById('modalCopyContentBtn').style.display = 'none';
   currentModalId = null;
+}
+
+// --- Settings ---
+
+let visionConfigState = null;
+
+async function openSettings() {
+  document.getElementById('settingsModal').classList.add('show');
+  await loadVisionConfig();
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+  hidePresetForm();
+}
+
+async function loadVisionConfig() {
+  try {
+    const resp = await fetch('/api/config/vision');
+    const data = await resp.json();
+    visionConfigState = data;
+    renderVisionConfig();
+  } catch (e) {
+    showToast('Failed to load vision config', true);
+  }
+}
+
+function renderVisionConfig() {
+  if (!visionConfigState) return;
+  const { active_preset, presets, enabled, env_overridden } = visionConfigState;
+
+  // Env banner
+  document.getElementById('settingsEnvBanner').style.display = env_overridden ? 'block' : 'none';
+
+  // Enabled toggle
+  const toggle = document.getElementById('visionEnabledToggle');
+  toggle.classList.toggle('on', enabled);
+
+  // Preset list
+  const list = document.getElementById('presetList');
+  list.innerHTML = '';
+  for (const p of presets) {
+    const isActive = p.name === active_preset;
+    const isEnv = p.name === 'env';
+    const item = document.createElement('div');
+    item.className = 'preset-item' + (isActive ? ' active' : '');
+
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.className = 'preset-radio';
+    radio.checked = isActive;
+    radio.disabled = env_overridden;
+    radio.onchange = () => setActivePreset(p.name);
+
+    const info = document.createElement('div');
+    info.className = 'preset-info';
+    info.innerHTML = `<div class="preset-name">${escapeHtml(p.name)}${isActive ? ' <span style="color:var(--accent);font-size:11px">● active</span>' : ''}</div>` +
+      `<div class="preset-desc">${escapeHtml(p.description || '')} — ${escapeHtml(p.model)} @ ${escapeHtml(p.endpoint)}</div>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'preset-actions';
+    if (!isEnv) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'preset-btn';
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = () => editPreset(p);
+      actions.appendChild(editBtn);
+
+      if (!isActive) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'preset-btn danger';
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = () => deletePreset(p.name);
+        actions.appendChild(delBtn);
+      }
+    }
+
+    item.appendChild(radio);
+    item.appendChild(info);
+    item.appendChild(actions);
+    list.appendChild(item);
+  }
+}
+
+async function setActivePreset(name) {
+  try {
+    const resp = await fetch('/api/config/vision/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset: name })
+    });
+    if (resp.ok) {
+      showToast(`Switched to preset: ${name}`);
+      await loadVisionConfig();
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to set active preset', true);
+    }
+  } catch (e) {
+    showToast('Failed to set active preset', true);
+  }
+}
+
+async function toggleVisionEnabled() {
+  const toggle = document.getElementById('visionEnabledToggle');
+  const newEnabled = !toggle.classList.contains('on');
+  try {
+    const resp = await fetch('/api/config/vision/enabled', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: newEnabled })
+    });
+    if (resp.ok) {
+      toggle.classList.toggle('on', newEnabled);
+      showToast(newEnabled ? 'Vision processing enabled' : 'Vision processing disabled');
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to toggle', true);
+    }
+  } catch (e) {
+    showToast('Failed to toggle vision enabled', true);
+  }
+}
+
+function showPresetForm() {
+  document.getElementById('presetFormMode').value = 'add';
+  document.getElementById('presetFormName').value = '';
+  document.getElementById('presetFormName').disabled = false;
+  document.getElementById('presetFormEndpoint').value = '';
+  document.getElementById('presetFormModel').value = '';
+  document.getElementById('presetFormApiKey').value = '';
+  document.getElementById('presetFormDesc').value = '';
+  document.getElementById('presetForm').classList.add('show');
+}
+
+function editPreset(p) {
+  document.getElementById('presetFormMode').value = 'edit';
+  document.getElementById('presetFormName').value = p.name;
+  document.getElementById('presetFormName').disabled = true;
+  document.getElementById('presetFormEndpoint').value = p.endpoint;
+  document.getElementById('presetFormModel').value = p.model;
+  document.getElementById('presetFormApiKey').value = p.api_key || '';
+  document.getElementById('presetFormDesc').value = p.description || '';
+  document.getElementById('presetForm').classList.add('show');
+}
+
+function hidePresetForm() {
+  document.getElementById('presetForm').classList.remove('show');
+}
+
+async function savePresetForm() {
+  const mode = document.getElementById('presetFormMode').value;
+  const name = document.getElementById('presetFormName').value.trim();
+  const endpoint = document.getElementById('presetFormEndpoint').value.trim();
+  const model = document.getElementById('presetFormModel').value.trim();
+  const apiKey = document.getElementById('presetFormApiKey').value.trim();
+  const description = document.getElementById('presetFormDesc').value.trim();
+
+  if (!name || !endpoint || !model) {
+    showToast('Name, endpoint, and model are required', true);
+    return;
+  }
+
+  try {
+    let resp;
+    if (mode === 'add') {
+      resp = await fetch('/api/config/vision/presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, endpoint, model, api_key: apiKey, description })
+      });
+    } else {
+      resp = await fetch(`/api/config/vision/presets/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint, model, api_key: apiKey, description })
+      });
+    }
+    if (resp.ok) {
+      showToast(mode === 'add' ? `Preset "${name}" created` : `Preset "${name}" updated`);
+      hidePresetForm();
+      await loadVisionConfig();
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to save preset', true);
+    }
+  } catch (e) {
+    showToast('Failed to save preset', true);
+  }
+}
+
+async function deletePreset(name) {
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  try {
+    const resp = await fetch(`/api/config/vision/presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (resp.ok) {
+      showToast(`Preset "${name}" deleted`);
+      await loadVisionConfig();
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to delete preset', true);
+    }
+  } catch (e) {
+    showToast('Failed to delete preset', true);
+  }
 }
 
 function copyModalContent() {

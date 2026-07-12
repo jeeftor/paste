@@ -105,10 +105,8 @@ func main() {
 	}
 	maxUploadBytes = int64(maxUploadMB) * 1024 * 1024
 
-	// Vision processing config
-	visionEndpoint = envOr("VISION_ENDPOINT", "http://localhost:13305/v1/chat/completions")
-	visionModel = envOr("VISION_MODEL", "Qwen3-VL-4B-Instruct-GGUF")
-	visionEnabled = envOr("VISION_ENABLED", "true") == "true"
+	// Vision processing config — loaded from config.json with env var overrides
+	initVisionConfig()
 
 	for _, d := range []string{textDir, fileDir, chunkDir} {
 		if err := os.MkdirAll(filepath.Join(dataDir, d), 0755); err != nil {
@@ -139,6 +137,8 @@ func main() {
 	mux.HandleFunc("/api/files", apiFilesHandler)
 	mux.HandleFunc("/api/files/", apiFileHandler)
 	mux.HandleFunc("/api/analyze/", apiAnalyzeHandler)
+	mux.HandleFunc("/api/config/vision", apiVisionConfigHandler)
+	mux.HandleFunc("/api/config/vision/", apiVisionConfigHandler)
 	mux.HandleFunc("/api/prompts", apiPromptsHandler)
 	mux.HandleFunc("/api/prompts/", apiPromptHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)
