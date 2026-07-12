@@ -205,6 +205,30 @@ body {
 .camera-switch:hover { color: var(--text); border-color: var(--accent); }
 .camera-switch svg { width: 20px; height: 20px; }
 
+/* Pull to refresh */
+.pull-indicator {
+  display: none;
+  text-align: center;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  transition: opacity 0.2s;
+}
+.pull-indicator.show { display: block; }
+.pull-indicator.ready { color: var(--accent); }
+.pull-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Upload progress */
 .upload-list {
   margin-bottom: 24px;
@@ -800,6 +824,7 @@ body {
     </div>
 
     <!-- Items -->
+    <div class="pull-indicator" id="pullIndicator">Pull to refresh</div>
     <div class="items-header">
       <h2>All Items</h2>
       <span class="items-count" id="itemsCount"></span>
@@ -1246,6 +1271,7 @@ function uploadFile(file) {
 
 function uploadSimple(file) {
   const ui = addUploadUI(file.name, file.size);
+  requestWakeLock();
   const formData = new FormData();
   formData.append('file', file);
   formData.append('ttl', document.getElementById('ttl').value);
@@ -1256,6 +1282,7 @@ function uploadSimple(file) {
     if (e.lengthComputable) updateUploadProgress(ui, e.loaded, e.total);
   };
   xhr.onload = () => {
+    releaseWakeLock();
     try {
       const data = JSON.parse(xhr.responseText);
       if (data.error) {
@@ -1267,13 +1294,17 @@ function uploadSimple(file) {
       uploadError(ui, 'Invalid server response');
     }
   };
-  xhr.onerror = () => uploadError(ui, 'Network error');
+  xhr.onerror = () => {
+    releaseWakeLock();
+    uploadError(ui, 'Network error');
+  };
   xhr.send(formData);
 }
 
 async function uploadChunked(file) {
   const ttl = document.getElementById('ttl').value;
   const ui = addUploadUI(file.name, file.size);
+  requestWakeLock();
 
   // Check for existing upload in localStorage (resume)
   const storageKey = `upload_${file.name}_${file.size}`;
@@ -1318,6 +1349,7 @@ async function uploadChunked(file) {
       const data = await resp.json();
       if (data.error) {
         uploadError(ui, data.error);
+        releaseWakeLock();
         return;
       }
       uploadId = data.upload_id;
@@ -1325,6 +1357,7 @@ async function uploadChunked(file) {
       try { localStorage.setItem(storageKey, uploadId); } catch {}
     } catch (err) {
       uploadError(ui, 'Failed to init upload: ' + err);
+      releaseWakeLock();
       return;
     }
   }
@@ -1369,6 +1402,7 @@ async function uploadChunked(file) {
           uploadError(ui, 'Upload expired on server');
           try { localStorage.removeItem(storageKey); } catch {}
           activeUploads.delete(uploadId);
+          releaseWakeLock();
           return;
         }
       } catch (err) {
@@ -1384,6 +1418,7 @@ async function uploadChunked(file) {
       uploadError(ui, `Failed to upload chunk ${i} after ${MAX_RETRIES} attempts. Click resume to retry.`);
       setUploadResume(ui, () => uploadChunked(file));
       activeUploads.delete(uploadId);
+      releaseWakeLock();
       return;
     }
   }
@@ -1406,6 +1441,7 @@ async function uploadChunked(file) {
     uploadError(ui, 'Failed to complete upload: ' + err);
   }
   activeUploads.delete(uploadId);
+  releaseWakeLock();
 }
 
 // --- Upload UI helpers ---
@@ -1749,7 +1785,7 @@ function formatExpiry(expires) {
 }
 
 function loadItems() {
-  fetch(`${API}/files`)
+  return fetch(`${API}/files`)
     .then(r => r.json())
     .then(data => {
       const grid = document.getElementById('itemsGrid');
@@ -1860,6 +1896,80 @@ setInterval(loadItems, 30000);
 
 // Initial load
 loadItems();
+
+// --- Pull to refresh ---
+(function() {
+  let pullStart = 0;
+  let pulling = false;
+  const indicator = document.getElementById('pullIndicator');
+  const threshold = 70;
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY <= 0) {
+      pullStart = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const delta = e.touches[0].clientY - pullStart;
+    if (delta > 0 && window.scrollY <= 0) {
+      indicator.classList.add('show');
+      if (delta >= threshold) {
+        indicator.classList.add('ready');
+        indicator.textContent = 'Release to refresh';
+      } else {
+        indicator.classList.remove('ready');
+        indicator.textContent = 'Pull to refresh';
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!pulling) return;
+    pulling = false;
+    const wasReady = indicator.classList.contains('ready');
+    indicator.classList.remove('show', 'ready');
+    if (wasReady) {
+      indicator.innerHTML = '<span class="pull-spinner"></span>Refreshing...';
+      indicator.classList.add('show');
+      loadItems().then(() => {
+        setTimeout(() => {
+          indicator.classList.remove('show');
+          indicator.innerHTML = 'Pull to refresh';
+        }, 500);
+      });
+    } else {
+      indicator.innerHTML = 'Pull to refresh';
+    }
+  }, { passive: true });
+})();
+
+// --- Wake lock during uploads ---
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch {}
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+// Re-acquire wake lock on visibility change (e.g., tab switch)
+document.addEventListener('visibilitychange', () => {
+  if (wakeLock !== null && document.visibilityState === 'visible' && activeUploads.size > 0) {
+    requestWakeLock();
+  }
+});
 
 // --- Service worker registration (for Share Target) ---
 if ('serviceWorker' in navigator) {
