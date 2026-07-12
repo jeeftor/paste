@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,9 +37,16 @@ const (
 	idLen            = 6
 	textDir          = "text"
 	fileDir          = "files"
+	chunkDir         = "chunks"
 	metaFile         = "metadata.json"
-	maxUploadMB      = 100
-	maxUploadBytes   = maxUploadMB * 1024 * 1024
+	defaultMaxUploadMB = 2048 // 2GB
+	chunkSize          = 5 * 1024 * 1024 // 5MB chunks
+	chunkStaleTime     = 1 * time.Hour   // incomplete uploads cleaned after 1h
+)
+
+var (
+	maxUploadMB    int
+	maxUploadBytes int64
 )
 
 var (
@@ -69,7 +77,16 @@ func main() {
 	baseURL = envOr("BASE_URL", defaultBaseURL)
 	port := envOr("PORT", defaultPort)
 
-	for _, d := range []string{textDir, fileDir} {
+	// Parse max upload size from env
+	maxUploadMB = defaultMaxUploadMB
+	if v := envOr("MAX_UPLOAD_MB", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxUploadMB = n
+		}
+	}
+	maxUploadBytes = int64(maxUploadMB) * 1024 * 1024
+
+	for _, d := range []string{textDir, fileDir, chunkDir} {
 		if err := os.MkdirAll(filepath.Join(dataDir, d), 0755); err != nil {
 			log.Fatalf("Failed to create dir %s: %v", d, err)
 		}
@@ -80,6 +97,8 @@ func main() {
 
 	// Start expiry sweeper
 	go sweeper()
+	// Start chunk cleanup sweeper
+	go chunkSweeper()
 
 	mux := http.NewServeMux()
 
@@ -97,6 +116,10 @@ func main() {
 	mux.HandleFunc("/api/text", apiTextHandler)
 	mux.HandleFunc("/api/text/", apiTextItemHandler)
 	mux.HandleFunc("/api/upload", apiUploadHandler)
+	mux.HandleFunc("/api/upload/init", apiUploadInitHandler)
+	mux.HandleFunc("/api/upload/chunk", apiUploadChunkHandler)
+	mux.HandleFunc("/api/upload/status/", apiUploadStatusHandler)
+	mux.HandleFunc("/api/upload/complete", apiUploadCompleteHandler)
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/api/version", versionHandler)
 
@@ -108,7 +131,7 @@ func main() {
 	mux.HandleFunc("/f/", directFileHandler)
 	mux.HandleFunc("/t/", directTextHandler)
 
-	log.Printf("paste server starting on :%s (data: %s, base: %s)", port, dataDir, baseURL)
+	log.Printf("paste server starting on :%s (data: %s, base: %s, max upload: %dMB)", port, dataDir, baseURL, maxUploadMB)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
@@ -595,6 +618,345 @@ func apiUploadHandler(w http.ResponseWriter, r *http.Request) {
 		"name": header.Filename,
 		"url":  fmt.Sprintf("%s/f/%s", baseURL, id),
 	})
+}
+
+// --- Chunked upload ---
+
+type chunkUploadMeta struct {
+	Filename    string    `json:"filename"`
+	MimeType    string    `json:"mime_type"`
+	Size        int64     `json:"size"`
+	TTL         string    `json:"ttl"`
+	TotalChunks int       `json:"total_chunks"`
+	Created     time.Time `json:"created"`
+}
+
+func chunkUploadDir(uploadID string) string {
+	return filepath.Join(dataDir, chunkDir, uploadID)
+}
+
+func chunkMetaPath(uploadID string) string {
+	return filepath.Join(chunkUploadDir(uploadID), ".meta")
+}
+
+func loadChunkMeta(uploadID string) (chunkUploadMeta, bool) {
+	data, err := os.ReadFile(chunkMetaPath(uploadID))
+	if err != nil {
+		return chunkUploadMeta{}, false
+	}
+	var m chunkUploadMeta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return chunkUploadMeta{}, false
+	}
+	return m, true
+}
+
+func saveChunkMeta(uploadID string, m chunkUploadMeta) error {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(chunkMetaPath(uploadID), data, 0644)
+}
+
+func apiUploadInitHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Filename string `json:"filename"`
+		MimeType string `json:"mime_type"`
+		Size     int64  `json:"size"`
+		TTL      string `json:"ttl"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Filename == "" {
+		http.Error(w, `{"error":"filename required"}`, http.StatusBadRequest)
+		return
+	}
+	if req.Size <= 0 {
+		http.Error(w, `{"error":"size required"}`, http.StatusBadRequest)
+		return
+	}
+	if req.Size > maxUploadBytes {
+		http.Error(w, fmt.Sprintf(`{"error":"file too large (max %d MB)"}`, maxUploadMB), http.StatusBadRequest)
+		return
+	}
+
+	totalChunks := int((req.Size + chunkSize - 1) / chunkSize)
+	uploadID := genChunkID()
+
+	dir := chunkUploadDir(uploadID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		http.Error(w, `{"error":"failed to create upload dir"}`, http.StatusInternalServerError)
+		return
+	}
+
+	meta := chunkUploadMeta{
+		Filename:    req.Filename,
+		MimeType:    req.MimeType,
+		Size:        req.Size,
+		TTL:         req.TTL,
+		TotalChunks: totalChunks,
+		Created:     time.Now(),
+	}
+	if err := saveChunkMeta(uploadID, meta); err != nil {
+		os.RemoveAll(dir)
+		http.Error(w, `{"error":"failed to save upload metadata"}`, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"upload_id":    uploadID,
+		"chunk_size":   chunkSize,
+		"total_chunks": totalChunks,
+	})
+}
+
+func apiUploadChunkHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Limit chunk size to chunkSize + some overhead for multipart encoding
+	r.Body = http.MaxBytesReader(w, r.Body, chunkSize+1024*1024)
+	if err := r.ParseMultipartForm(chunkSize + 1024*1024); err != nil {
+		http.Error(w, `{"error":"chunk too large or invalid"}`, http.StatusBadRequest)
+		return
+	}
+
+	uploadID := r.FormValue("upload_id")
+	if uploadID == "" {
+		http.Error(w, `{"error":"upload_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	meta, ok := loadChunkMeta(uploadID)
+	if !ok {
+		http.Error(w, `{"error":"upload not found or expired"}`, http.StatusNotFound)
+		return
+	}
+
+	chunkIndexStr := r.FormValue("chunk_index")
+	chunkIndex, err := strconv.Atoi(chunkIndexStr)
+	if err != nil || chunkIndex < 0 || chunkIndex >= meta.TotalChunks {
+		http.Error(w, `{"error":"invalid chunk_index"}`, http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("chunk")
+	if err != nil {
+		http.Error(w, `{"error":"chunk data required"}`, http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	chunkPath := filepath.Join(chunkUploadDir(uploadID), strconv.Itoa(chunkIndex))
+	dst, err := os.Create(chunkPath)
+	if err != nil {
+		http.Error(w, `{"error":"failed to write chunk"}`, http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(w, `{"error":"failed to write chunk"}`, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"ok":           true,
+		"chunk_index":  chunkIndex,
+		"upload_id":    uploadID,
+	})
+}
+
+func apiUploadStatusHandler(w http.ResponseWriter, r *http.Request) {
+	uploadID := strings.TrimPrefix(r.URL.Path, "/api/upload/status/")
+	if uploadID == "" {
+		http.Error(w, `{"error":"upload_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	meta, ok := loadChunkMeta(uploadID)
+	if !ok {
+		http.Error(w, `{"error":"upload not found or expired"}`, http.StatusNotFound)
+		return
+	}
+
+	// List received chunks
+	entries, err := os.ReadDir(chunkUploadDir(uploadID))
+	if err != nil {
+		http.Error(w, `{"error":"failed to read upload dir"}`, http.StatusInternalServerError)
+		return
+	}
+
+	received := []int{}
+	for _, e := range entries {
+		if e.Name() == ".meta" {
+			continue
+		}
+		if idx, err := strconv.Atoi(e.Name()); err == nil {
+			received = append(received, idx)
+		}
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"upload_id":    uploadID,
+		"filename":     meta.Filename,
+		"size":         meta.Size,
+		"total_chunks": meta.TotalChunks,
+		"received":     received,
+		"complete":     len(received) == meta.TotalChunks,
+	})
+}
+
+func apiUploadCompleteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		UploadID string `json:"upload_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.UploadID == "" {
+		http.Error(w, `{"error":"upload_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	meta, ok := loadChunkMeta(req.UploadID)
+	if !ok {
+		http.Error(w, `{"error":"upload not found or expired"}`, http.StatusNotFound)
+		return
+	}
+
+	// Verify all chunks are present
+	dir := chunkUploadDir(req.UploadID)
+	for i := 0; i < meta.TotalChunks; i++ {
+		chunkPath := filepath.Join(dir, strconv.Itoa(i))
+		if _, err := os.Stat(chunkPath); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"missing chunk %d"}`, i), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Reassemble chunks into final file
+	id := genID()
+	fpath := filepath.Join(dataDir, fileDir, id)
+	dst, err := os.Create(fpath)
+	if err != nil {
+		http.Error(w, `{"error":"failed to create file"}`, http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	var totalWritten int64
+	for i := 0; i < meta.TotalChunks; i++ {
+		chunkPath := filepath.Join(dir, strconv.Itoa(i))
+		chunkFile, err := os.Open(chunkPath)
+		if err != nil {
+			os.Remove(fpath)
+			http.Error(w, `{"error":"failed to read chunk"}`, http.StatusInternalServerError)
+			return
+		}
+		n, err := io.Copy(dst, chunkFile)
+		chunkFile.Close()
+		if err != nil {
+			os.Remove(fpath)
+			http.Error(w, `{"error":"failed to write file"}`, http.StatusInternalServerError)
+			return
+		}
+		totalWritten += n
+	}
+
+	// Clean up chunks
+	os.RemoveAll(dir)
+
+	mimeType := meta.MimeType
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+
+	ttl, err := parseTTL(meta.TTL)
+	if err != nil {
+		ttl = defaultTTL
+	}
+
+	var expires time.Time
+	if ttl > 0 {
+		expires = time.Now().Add(ttl)
+	}
+
+	item := Item{
+		ID:       id,
+		Name:     meta.Filename,
+		Type:     "file",
+		MimeType: mimeType,
+		Size:     totalWritten,
+		Created:  time.Now(),
+		Expires:  expires,
+		TTL:      ttlString(ttl),
+	}
+	addItem(item)
+
+	writeJSON(w, map[string]interface{}{
+		"id":   id,
+		"name": meta.Filename,
+		"url":  fmt.Sprintf("%s/f/%s", baseURL, id),
+	})
+}
+
+func genChunkID() string {
+	// Reuse genID but ensure it doesn't collide with existing items or chunk uploads
+	for {
+		id := genID()
+		// Check it doesn't already exist as a chunk upload
+		if _, err := os.Stat(chunkUploadDir(id)); os.IsNotExist(err) {
+			return id
+		}
+	}
+}
+
+// chunkSweeper cleans up incomplete chunk uploads older than chunkStaleTime
+func chunkSweeper() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		root := filepath.Join(dataDir, chunkDir)
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		now := time.Now()
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			meta, ok := loadChunkMeta(e.Name())
+			if !ok {
+				// No meta file — stale, remove
+				os.RemoveAll(filepath.Join(root, e.Name()))
+				continue
+			}
+			if now.Sub(meta.Created) > chunkStaleTime {
+				os.RemoveAll(filepath.Join(root, e.Name()))
+				log.Printf("Cleaned up stale chunk upload %s (%s)", e.Name(), meta.Filename)
+			}
+		}
+	}
 }
 
 func directFileHandler(w http.ResponseWriter, r *http.Request) {

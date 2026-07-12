@@ -205,6 +205,59 @@ body {
 .camera-switch:hover { color: var(--text); border-color: var(--accent); }
 .camera-switch svg { width: 20px; height: 20px; }
 
+/* Upload progress */
+.upload-list {
+  margin-bottom: 24px;
+}
+.upload-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+.upload-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.upload-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.upload-item-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 12px;
+}
+.upload-item-status.error { color: var(--danger); }
+.upload-item-status.done { color: var(--success); }
+.progress-bar {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.progress-bar-fill.error { background: var(--danger); }
+.progress-bar-fill.done { background: var(--success); }
+.upload-item-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* Text input */
 .text-input-section {
   margin-bottom: 24px;
@@ -734,6 +787,9 @@ body {
       <input type="file" id="cameraNativeInput" accept="image/*" capture="environment" hidden>
     </div>
 
+    <!-- Upload progress -->
+    <div class="upload-list" id="uploadList"></div>
+
     <!-- Text input -->
     <div class="text-input-section">
       <textarea class="text-input" id="textInput" placeholder="Paste text or code here... (Ctrl+Enter to submit)"></textarea>
@@ -780,11 +836,63 @@ body {
       <div class="api-card-header">
         <span class="api-method POST">POST</span>
         <span class="api-path">/api/upload</span>
-        <span class="api-desc">Upload a file</span>
+        <span class="api-desc">Upload a file (simple, &lt;5MB recommended)</span>
       </div>
       <div class="api-card-body">
         <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
         <div class="api-example"><span class="curl">curl</span> <span class="flag">-F</span> <span class="json-str">'file=@screenshot.png'</span> <span class="flag">-F</span> <span class="json-str">'ttl=7d'</span> <span class="url" id="restUrl2"></span>/api/upload</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/upload/init</span>
+        <span class="api-desc">Initialize chunked upload (for large files)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="flag">-H</span> <span class="json-str">'Content-Type: application/json'</span> \
+  <span class="flag">-d</span> <span class="json-str">'{"filename":"big.zip","size":524288000,"mime_type":"application/zip","ttl":"7d"}'</span> \
+  <span class="url" id="restUrl2b"></span>/api/upload/init</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/upload/chunk</span>
+        <span class="api-desc">Upload a chunk (multipart: upload_id, chunk_index, chunk)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-F</span> <span class="json-str">'upload_id=abc123'</span> <span class="flag">-F</span> <span class="json-str">'chunk_index=0'</span> <span class="flag">-F</span> <span class="json-str">'chunk=@chunk0.bin'</span> <span class="url" id="restUrl2c"></span>/api/upload/chunk</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/upload/status/{upload_id}</span>
+        <span class="api-desc">Check which chunks have been received (for resume)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl2d"></span>/api/upload/status/<span class="json-key">{upload_id}</span></div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/upload/complete</span>
+        <span class="api-desc">Finalize chunked upload (reassembles file)</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="flag">-X</span> POST <span class="flag">-H</span> <span class="json-str">'Content-Type: application/json'</span> \
+  <span class="flag">-d</span> <span class="json-str">'{"upload_id":"abc123"}'</span> \
+  <span class="url" id="restUrl2e"></span>/api/upload/complete</div>
       </div>
     </div>
 
@@ -1009,6 +1117,11 @@ function switchTab(tab) {
     const el = document.getElementById('restUrl' + i);
     if (el) el.textContent = BASE;
   }
+  // Chunked upload URLs
+  for (const suffix of ['b', 'c', 'd', 'e']) {
+    const el = document.getElementById('restUrl2' + suffix);
+    if (el) el.textContent = BASE;
+  }
   // MCP tab
   const mcpEp = document.getElementById('mcpEndpoint');
   if (mcpEp) mcpEp.textContent = BASE + '/mcp';
@@ -1117,22 +1230,243 @@ document.getElementById('textInput').addEventListener('keydown', e => {
   }
 });
 
+// --- File upload (chunked for large files, simple for small) ---
+const CHUNK_THRESHOLD = 5 * 1024 * 1024; // 5MB — below this, use simple upload
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+const MAX_RETRIES = 3;
+const activeUploads = new Map(); // uploadId -> { file, meta, received, aborted }
+
 function uploadFile(file) {
+  if (file.size >= CHUNK_THRESHOLD) {
+    uploadChunked(file);
+  } else {
+    uploadSimple(file);
+  }
+}
+
+function uploadSimple(file) {
+  const ui = addUploadUI(file.name, file.size);
   const formData = new FormData();
   formData.append('file', file);
   formData.append('ttl', document.getElementById('ttl').value);
 
-  fetch(`${API}/upload`, { method: 'POST', body: formData })
-    .then(r => r.json())
-    .then(data => {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', `${API}/upload`);
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) updateUploadProgress(ui, e.loaded, e.total);
+  };
+  xhr.onload = () => {
+    try {
+      const data = JSON.parse(xhr.responseText);
       if (data.error) {
-        showToast(data.error, true);
+        uploadError(ui, data.error);
       } else {
-        showToast(`Uploaded: ${data.name} → ${data.url}`);
-        loadItems();
+        uploadDone(ui, data);
       }
-    })
-    .catch(err => showToast('Upload failed: ' + err, true));
+    } catch {
+      uploadError(ui, 'Invalid server response');
+    }
+  };
+  xhr.onerror = () => uploadError(ui, 'Network error');
+  xhr.send(formData);
+}
+
+async function uploadChunked(file) {
+  const ttl = document.getElementById('ttl').value;
+  const ui = addUploadUI(file.name, file.size);
+
+  // Check for existing upload in localStorage (resume)
+  const storageKey = `upload_${file.name}_${file.size}`;
+  let existingUploadId = null;
+  try {
+    existingUploadId = localStorage.getItem(storageKey);
+  } catch {}
+
+  let uploadId = existingUploadId;
+  let totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  let received = new Set();
+
+  // If we have an existing upload ID, check its status
+  if (uploadId) {
+    try {
+      const resp = await fetch(`${API}/upload/status/${uploadId}`);
+      if (resp.ok) {
+        const status = await resp.json();
+        totalChunks = status.total_chunks;
+        received = new Set(status.received);
+      } else {
+        uploadId = null; // expired or not found
+      }
+    } catch {
+      uploadId = null;
+    }
+  }
+
+  // Init new upload if needed
+  if (!uploadId) {
+    try {
+      const resp = await fetch(`${API}/upload/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          mime_type: file.type || 'application/octet-stream',
+          size: file.size,
+          ttl: ttl
+        })
+      });
+      const data = await resp.json();
+      if (data.error) {
+        uploadError(ui, data.error);
+        return;
+      }
+      uploadId = data.upload_id;
+      totalChunks = data.total_chunks;
+      try { localStorage.setItem(storageKey, uploadId); } catch {}
+    } catch (err) {
+      uploadError(ui, 'Failed to init upload: ' + err);
+      return;
+    }
+  }
+
+  const uploadState = { file, aborted: false };
+  activeUploads.set(uploadId, uploadState);
+
+  // Upload missing chunks
+  let completed = received.size;
+  updateUploadProgress(ui, completed * CHUNK_SIZE, file.size);
+
+  for (let i = 0; i < totalChunks; i++) {
+    if (received.has(i)) continue;
+    if (uploadState.aborted) return;
+
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+
+    let success = false;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (uploadState.aborted) return;
+      try {
+        const formData = new FormData();
+        formData.append('upload_id', uploadId);
+        formData.append('chunk_index', i);
+        formData.append('chunk', chunk, `chunk_${i}`);
+
+        const resp = await fetch(`${API}/upload/chunk`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          success = true;
+          received.add(i);
+          completed++;
+          updateUploadProgress(ui, completed * CHUNK_SIZE, file.size);
+          break;
+        }
+        if (data.error && data.error.includes('not found')) {
+          uploadError(ui, 'Upload expired on server');
+          try { localStorage.removeItem(storageKey); } catch {}
+          activeUploads.delete(uploadId);
+          return;
+        }
+      } catch (err) {
+        // Network error — will retry
+      }
+      // Wait before retry (exponential backoff)
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      }
+    }
+
+    if (!success) {
+      uploadError(ui, `Failed to upload chunk ${i} after ${MAX_RETRIES} attempts. Click resume to retry.`);
+      setUploadResume(ui, () => uploadChunked(file));
+      activeUploads.delete(uploadId);
+      return;
+    }
+  }
+
+  // All chunks uploaded — complete
+  try {
+    const resp = await fetch(`${API}/upload/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upload_id: uploadId })
+    });
+    const data = await resp.json();
+    if (data.error) {
+      uploadError(ui, data.error);
+    } else {
+      uploadDone(ui, data);
+      try { localStorage.removeItem(storageKey); } catch {}
+    }
+  } catch (err) {
+    uploadError(ui, 'Failed to complete upload: ' + err);
+  }
+  activeUploads.delete(uploadId);
+}
+
+// --- Upload UI helpers ---
+
+function addUploadUI(name, size) {
+  const list = document.getElementById('uploadList');
+  const item = document.createElement('div');
+  item.className = 'upload-item';
+  item.innerHTML = `
+    <div class="upload-item-header">
+      <span class="upload-item-name">${escapeHtml(name)}</span>
+      <span class="upload-item-status">0%</span>
+    </div>
+    <div class="progress-bar"><div class="progress-bar-fill" style="width:0%"></div></div>
+  `;
+  list.appendChild(item);
+  return { el: item, name, size };
+}
+
+function updateUploadProgress(ui, loaded, total) {
+  const pct = Math.min(100, Math.round((loaded / total) * 100));
+  const fill = ui.el.querySelector('.progress-bar-fill');
+  const status = ui.el.querySelector('.upload-item-status');
+  fill.style.width = pct + '%';
+  status.textContent = `${pct}% (${formatSize(loaded)} / ${formatSize(total)})`;
+}
+
+function uploadDone(ui, data) {
+  const fill = ui.el.querySelector('.progress-bar-fill');
+  const status = ui.el.querySelector('.upload-item-status');
+  fill.style.width = '100%';
+  fill.classList.add('done');
+  status.classList.add('done');
+  status.textContent = `Done → ${data.url}`;
+  showToast(`Uploaded: ${data.name}`);
+  loadItems();
+  // Remove from UI after 5s
+  setTimeout(() => ui.el.remove(), 5000);
+}
+
+function uploadError(ui, msg) {
+  const fill = ui.el.querySelector('.progress-bar-fill');
+  const status = ui.el.querySelector('.upload-item-status');
+  fill.classList.add('error');
+  status.classList.add('error');
+  status.textContent = msg;
+  showToast(msg, true);
+}
+
+function setUploadResume(ui, resumeFn) {
+  const actions = document.createElement('div');
+  actions.className = 'upload-item-actions';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary btn-sm';
+  btn.textContent = 'Resume';
+  btn.onclick = () => {
+    ui.el.remove();
+    resumeFn();
+  };
+  actions.appendChild(btn);
+  ui.el.appendChild(actions);
 }
 
 function submitText() {

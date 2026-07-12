@@ -355,7 +355,7 @@ func mcpUploadFile(filename, content, mimeType, ttlStr string) (interface{}, *MC
 	if err != nil {
 		return nil, &MCPError{Code: -32602, Message: "invalid base64 content"}
 	}
-	if len(data) > maxUploadBytes {
+	if int64(len(data)) > maxUploadBytes {
 		return nil, &MCPError{Code: -32602, Message: fmt.Sprintf("file too large (max %d MB)", maxUploadMB)}
 	}
 
