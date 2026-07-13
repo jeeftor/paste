@@ -1499,7 +1499,29 @@ body {
 
     <div class="settings-section">
       <h4>Vision Prompts</h4>
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Manage vision prompt templates via the <code style="color:var(--accent)">/api/prompts</code> REST API. Built-in prompts: <code>default</code>, <code>terminal</code>, <code>code</code>, <code>document</code>, <code>diagram</code>.</p>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Prompt templates control how the vision model analyzes images. Built-in prompts can be edited but not deleted.</p>
+      <div class="preset-list" id="promptList"></div>
+      <button class="btn btn-secondary" style="margin-top:12px;font-size:13px;padding:6px 12px" onclick="showPromptForm()">+ Add Prompt</button>
+
+      <div class="preset-form" id="promptForm">
+        <input type="hidden" id="promptFormMode" value="add">
+        <div class="preset-form-row">
+          <label>Name (unique identifier)</label>
+          <input type="text" id="promptFormName" placeholder="my-prompt">
+        </div>
+        <div class="preset-form-row">
+          <label>Description</label>
+          <input type="text" id="promptFormDesc" placeholder="What this prompt does">
+        </div>
+        <div class="preset-form-row">
+          <label>Prompt Text</label>
+          <textarea id="promptFormText" rows="8" placeholder="Analyze this image and..." style="width:100%;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+        </div>
+        <div class="preset-form-actions">
+          <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="savePromptForm()">Save</button>
+          <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px" onclick="hidePromptForm()">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1559,7 +1581,7 @@ function switchTab(tab, ev) {
   if (ev) ev.target.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'persistent') loadPersistentItems();
-  if (tab === 'config') loadVisionConfig();
+  if (tab === 'config') { loadVisionConfig(); loadVisionPrompts(); }
 }
 
 // --- Populate API/MCP URLs on load ---
@@ -2398,6 +2420,134 @@ async function testPreset(name, btn) {
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;
+  }
+}
+
+// --- Vision Prompts ---
+
+let visionPromptsState = [];
+
+async function loadVisionPrompts() {
+  try {
+    const resp = await fetch('/api/prompts');
+    const data = await resp.json();
+    visionPromptsState = data.prompts || [];
+    renderVisionPrompts();
+  } catch (e) {
+    showToast('Failed to load prompts', true);
+  }
+}
+
+function renderVisionPrompts() {
+  const list = document.getElementById('promptList');
+  list.innerHTML = '';
+  for (const p of visionPromptsState) {
+    const item = document.createElement('div');
+    item.className = 'preset-item';
+
+    const info = document.createElement('div');
+    info.className = 'preset-info';
+    const badge = p.built_in ? ' <span style="color:var(--text-muted);font-size:10px;border:1px solid var(--border);padding:1px 5px;border-radius:3px">built-in</span>' : '';
+    info.innerHTML = `<div class="preset-name">${escapeHtml(p.name)}${badge}</div>` +
+      `<div class="preset-desc">${escapeHtml(p.description || '')}</div>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'preset-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'preset-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => editPrompt(p);
+    actions.appendChild(editBtn);
+
+    if (!p.built_in) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'preset-btn danger';
+      delBtn.textContent = 'Delete';
+      delBtn.onclick = () => deletePrompt(p.name);
+      actions.appendChild(delBtn);
+    }
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    list.appendChild(item);
+  }
+}
+
+function showPromptForm() {
+  document.getElementById('promptFormMode').value = 'add';
+  document.getElementById('promptFormName').value = '';
+  document.getElementById('promptFormName').disabled = false;
+  document.getElementById('promptFormDesc').value = '';
+  document.getElementById('promptFormText').value = '';
+  document.getElementById('promptForm').classList.add('show');
+}
+
+function editPrompt(p) {
+  document.getElementById('promptFormMode').value = 'edit';
+  document.getElementById('promptFormName').value = p.name;
+  document.getElementById('promptFormName').disabled = true;
+  document.getElementById('promptFormDesc').value = p.description || '';
+  document.getElementById('promptFormText').value = p.prompt || '';
+  document.getElementById('promptForm').classList.add('show');
+}
+
+function hidePromptForm() {
+  document.getElementById('promptForm').classList.remove('show');
+}
+
+async function savePromptForm() {
+  const mode = document.getElementById('promptFormMode').value;
+  const name = document.getElementById('promptFormName').value.trim();
+  const description = document.getElementById('promptFormDesc').value.trim();
+  const prompt = document.getElementById('promptFormText').value.trim();
+
+  if (!name || !prompt) {
+    showToast('Name and prompt text are required', true);
+    return;
+  }
+
+  try {
+    let resp;
+    if (mode === 'add') {
+      resp = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, prompt })
+      });
+    } else {
+      resp = await fetch(`/api/prompts/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, prompt })
+      });
+    }
+    if (resp.ok) {
+      showToast(mode === 'add' ? `Prompt "${name}" created` : `Prompt "${name}" updated`);
+      hidePromptForm();
+      await loadVisionPrompts();
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to save prompt', true);
+    }
+  } catch (e) {
+    showToast('Failed to save prompt', true);
+  }
+}
+
+async function deletePrompt(name) {
+  if (!confirm(`Delete prompt "${name}"?`)) return;
+  try {
+    const resp = await fetch(`/api/prompts/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (resp.ok) {
+      showToast(`Prompt "${name}" deleted`);
+      await loadVisionPrompts();
+    } else {
+      const err = await resp.json();
+      showToast(err.error || 'Failed to delete prompt', true);
+    }
+  } catch (e) {
+    showToast('Failed to delete prompt', true);
   }
 }
 
