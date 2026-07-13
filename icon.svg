@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect x="8" y="8" width="496" height="496" rx="100" fill="#4b5563"/>
-  <rect x="148" y="184" width="240" height="300" rx="26" fill="#000000" opacity="0.3"/>
-  <rect x="136" y="170" width="240" height="300" rx="26" fill="#ffffff" stroke="#111111" stroke-width="16" stroke-linejoin="round"/>
-  <rect x="197" y="128" width="118" height="72" rx="20" fill="#ccd2d9" stroke="#111111" stroke-width="16" stroke-linejoin="round"/>
-  <circle cx="256" cy="164" r="13" fill="#111111"/>
-  <text x="256" y="390" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="800" fill="#2f6fed" text-anchor="middle">K</text>
+  <rect x="148" y="141" width="240" height="300" rx="26" fill="#000000" opacity="0.3"/>
+  <rect x="136" y="127" width="240" height="300" rx="26" fill="#ffffff" stroke="#111111" stroke-width="16" stroke-linejoin="round"/>
+  <rect x="197" y="85" width="118" height="72" rx="20" fill="#ccd2d9" stroke="#111111" stroke-width="16" stroke-linejoin="round"/>
+  <circle cx="256" cy="121" r="13" fill="#111111"/>
+  <text x="256" y="347" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="800" fill="#2f6fed" text-anchor="middle">K</text>
 </svg>

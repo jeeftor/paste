@@ -59,18 +59,10 @@ body {
   gap: 8px;
 }
 .header h1 .logo {
-  width: 28px;
-  height: 28px;
-  background: #ffffff;
-  border: 2px solid #111418;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--brand2, #2f6fed);
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  display: block;
 }
 .version-badge {
   font-size: 11px;
@@ -1047,7 +1039,7 @@ body {
 <body>
 
 <div class="header">
-  <h1><span class="logo">K</span> Klipbord <span class="version-badge" id="versionBadge">{{VERSION}}</span></h1>
+  <h1><img src="/icon.svg" class="logo" alt="K"> Klipbord <span class="version-badge" id="versionBadge">{{VERSION}}</span></h1>
   <div class="header-actions">
     <select class="ttl-select" id="ttl">
       <option value="1h">Expires in 1 hour</option>
@@ -1111,11 +1103,11 @@ body {
     </div>
     <div class="search-row">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      <input type="text" class="search-input" id="clipboardSearch" placeholder="Search filenames or recognized text (OCR/vision results)..." oninput="renderClipboardGrid()">
+      <input type="text" class="search-input" id="clipboardSearch" placeholder="Search filenames, text content, or vision results..." oninput="renderClipboardGrid()">
     </div>
     <div id="itemsGrid" class="items-grid"></div>
     <div id="emptyState" class="empty" style="display:none">
-      <div class="empty-icon">📭</div>
+      <div class="empty-icon">📋</div>
       <p>No items yet. Paste something above!</p>
     </div>
     <div id="clipboardNoResults" class="empty" style="display:none">
@@ -1146,7 +1138,7 @@ body {
     </div>
     <div class="search-row">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      <input type="text" class="search-input" id="persistentSearch" placeholder="Search filenames or recognized text (OCR/vision results)..." oninput="renderPersistentGrid()">
+      <input type="text" class="search-input" id="persistentSearch" placeholder="Search filenames, text content, or vision results..." oninput="renderPersistentGrid()">
     </div>
     <div id="persistentGrid" class="items-grid"></div>
     <div id="persistentEmpty" class="empty" style="display:none">
