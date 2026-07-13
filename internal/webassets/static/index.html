@@ -879,6 +879,7 @@ body {
   font-weight: 500;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
+  text-decoration: none;
   transition: all 0.15s;
   font-family: var(--font);
 }
@@ -1043,11 +1044,11 @@ body {
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="switchTab('clipboard', event)">Clipboard</button>
-  <button class="tab" onclick="switchTab('persistent', event)">Persistent</button>
-  <button class="tab" onclick="switchTab('rest', event)">REST API</button>
-  <button class="tab" onclick="switchTab('mcp', event)">MCP</button>
-  <button class="tab" onclick="switchTab('config', event)">Config</button>
+  <a class="tab active" data-tab="clipboard" href="/clip" onclick="switchTab('clipboard', event)">Clipboard</a>
+  <a class="tab" data-tab="persistent" href="/persist" onclick="switchTab('persistent', event)">Persistent</a>
+  <a class="tab" data-tab="rest" href="/rest-web" onclick="switchTab('rest', event)">REST API</a>
+  <a class="tab" data-tab="mcp" href="/mcp-web" onclick="switchTab('mcp', event)">MCP</a>
+  <a class="tab" data-tab="config" href="/config" onclick="switchTab('config', event)">Config</a>
 </div>
 
 <!-- Tab: Clipboard -->
@@ -1814,15 +1815,37 @@ const ICONS = {
   scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><line x1="7" y1="12" x2="17" y2="12"></line></svg>',
 };
 
-// --- Tab switching ---
-function switchTab(tab, ev) {
+// --- Browser routes and tab switching ---
+const tabRoutes = {
+  clipboard: '/clip',
+  persistent: '/persist',
+  rest: '/rest-web',
+  mcp: '/mcp-web',
+  config: '/config',
+};
+
+function tabFromLocation() {
+  return Object.entries(tabRoutes).find(([, path]) => path === window.location.pathname)?.[0] || 'clipboard';
+}
+
+function activateTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  if (ev) ev.target.classList.add('active');
+  document.querySelector(`.tab[data-tab="${tab}"]`)?.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'persistent') loadPersistentItems();
   if (tab === 'config') { loadVisionConfig(); loadVisionPrompts(); }
 }
+
+function switchTab(tab, event) {
+  event?.preventDefault();
+  activateTab(tab);
+  if (window.location.pathname !== tabRoutes[tab]) {
+    window.history.pushState({ tab }, '', tabRoutes[tab]);
+  }
+}
+
+window.addEventListener('popstate', () => activateTab(tabFromLocation()));
 
 // --- Populate API/MCP URLs on load ---
 (function populateUrls() {
@@ -3945,8 +3968,8 @@ setInterval(() => {
   }
 }, 5000);
 
-// Initial load
-loadItems();
+// Initial load is selected from the URL so a refresh keeps the current section.
+activateTab(tabFromLocation());
 
 // --- Pull to refresh ---
 (function() {

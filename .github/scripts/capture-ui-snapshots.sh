@@ -58,7 +58,7 @@ curl --fail --silent --show-error \
   --form 'ttl=7d' \
   "$base_url/api/upload" >/dev/null
 
-pwcli open "$base_url/"
+pwcli open "$base_url/clip"
 pwcli resize 1440 1000
 pwcli snapshot >"$output_dir/clipboard-desktop.snapshot.txt"
 pwcli run-code "async page => { await page.locator('[data-item-id=\"$text_id\"]').waitFor(); }"
@@ -70,13 +70,16 @@ curl --fail --silent --show-error \
   --data '{"persistent":true}' \
   "$base_url/api/files/$text_id" >/dev/null
 
-pwcli run-code "async page => { await page.getByRole('button', { name: 'Persistent', exact: true }).click(); }"
+pwcli run-code "async page => { await page.getByRole('link', { name: 'Persistent', exact: true }).click(); }"
 pwcli snapshot >"$output_dir/persistent-desktop.snapshot.txt"
 pwcli run-code "async page => { await page.locator('#persistentGrid [data-item-id=\"$text_id\"]').waitFor(); }"
 pwcli run-code "async page => { await page.locator('#persistentGrid [data-preview-id=\"$text_id\"] code').waitFor(); }"
 pwcli run-code "async page => { await page.screenshot({ path: '$output_dir/persistent-desktop.png', fullPage: true }); }"
 
-pwcli run-code "async page => { await page.getByRole('button', { name: 'Clipboard', exact: true }).click(); }"
+pwcli reload
+pwcli run-code "async page => { if (page.url() !== '$base_url/persist') throw new Error('refresh did not keep /persist'); await page.locator('#tab-persistent.active').waitFor(); }"
+
+pwcli run-code "async page => { await page.getByRole('link', { name: 'Clipboard', exact: true }).click(); }"
 pwcli resize 390 844
 pwcli snapshot >"$output_dir/clipboard-mobile.snapshot.txt"
 pwcli run-code "async page => { await page.screenshot({ path: '$output_dir/clipboard-mobile.png', fullPage: true }); }"

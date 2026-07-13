@@ -274,6 +274,22 @@ https://klipbord.example.com/link/{id} # file, image, or text snippet
 
 ---
 
+## Web UI Routes
+
+Each UI section has a stable URL, so it remains selected after a refresh and can be bookmarked.
+
+| Route | UI section |
+|-------|------------|
+| `/clip` | Clipboard items and upload controls |
+| `/persist` | Persistent items |
+| `/config` | Vision configuration |
+| `/mcp-web` | MCP setup and tool reference |
+| `/rest-web` | REST API reference |
+
+`/` redirects to `/clip`. The browser UI routes are intentionally separate from the machine interfaces: REST remains under `/api/...`, MCP remains at `/mcp`, and direct item links remain under `/link/{id}`.
+
+---
+
 ## Storage Layout
 
 | Path | Content |
