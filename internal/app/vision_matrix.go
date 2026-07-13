@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -376,96 +375,39 @@ func runVisionMatrix(run *matrixRun, presets []*VisionPreset, prompts []*VisionP
 			Cells:    make(map[string]map[string]*MatrixCell),
 		}
 
-		// Semaphore for concurrency limit within this preset.
-		sem := make(chan struct{}, matrixConcurrency)
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		var startedCells atomic.Int32
-
+		cellNumber := 0
 		for _, imgType := range imageTypes {
 			for _, prompt := range prompts {
 				t, ok := tempImgs[imgType]
 				if !ok {
 					continue
 				}
-				wg.Add(1)
-				go func(imgT string, p *VisionPrompt, tmpID string) {
-					defer wg.Done()
-					sem <- struct{}{}
-					defer func() { <-sem }()
-					cellNumber := int(startedCells.Add(1))
-					overallCell := pi*cellsPerPreset + cellNumber
+				cellNumber++
+				overallCell := pi*cellsPerPreset + cellNumber
 
-					slog.Info("vision matrix cell started",
-						"preset", preset.Name,
-						"preset_index", pi+1,
-						"preset_total", len(presets),
-						"cell", cellNumber,
-						"cell_total", cellsPerPreset,
-						"overall_cell", overallCell,
-						"overall_total", totalCells,
-						"image", imgT,
-						"prompt", p.Name,
-					)
-					sendEvent("cell_start", map[string]interface{}{
-						"preset": preset.Name, "image": imgT, "prompt": p.Name,
-						"cell": cellNumber, "cell_total": cellsPerPreset,
-						"overall_cell": overallCell, "overall_total": totalCells,
-					})
+				slog.Info("vision matrix cell started", "preset", preset.Name, "preset_index", pi+1, "preset_total", len(presets), "cell", cellNumber, "cell_total", cellsPerPreset, "overall_cell", overallCell, "overall_total", totalCells, "image", imgType, "prompt", prompt.Name)
+				sendEvent("cell_start", map[string]interface{}{"preset": preset.Name, "image": imgType, "prompt": prompt.Name, "cell": cellNumber, "cell_total": cellsPerPreset, "overall_cell": overallCell, "overall_total": totalCells})
 
-					cell := runMatrixCell(tmpID, preset, p)
+				cell := runMatrixCell(t.id, preset, prompt)
 
-					mu.Lock()
-					if pr.Cells[imgT] == nil {
-						pr.Cells[imgT] = make(map[string]*MatrixCell)
-					}
-					pr.Cells[imgT][p.Name] = cell
-					pr.TotalRuns++
-					if cell.Success {
-						pr.Successes++
-					}
-					mu.Unlock()
+				if pr.Cells[imgType] == nil {
+					pr.Cells[imgType] = make(map[string]*MatrixCell)
+				}
+				pr.Cells[imgType][prompt.Name] = cell
+				pr.TotalRuns++
+				if cell.Success {
+					pr.Successes++
+				}
 
-					if cell.Success {
-						slog.Info("vision matrix cell passed",
-							"preset", preset.Name,
-							"cell", cellNumber,
-							"cell_total", cellsPerPreset,
-							"overall_cell", overallCell,
-							"image", imgT,
-							"prompt", p.Name,
-							"duration_ms", cell.DurationMs,
-						)
-					} else {
-						slog.Error("vision matrix cell failed",
-							"preset", preset.Name,
-							"cell", cellNumber,
-							"cell_total", cellsPerPreset,
-							"overall_cell", overallCell,
-							"image", imgT,
-							"prompt", p.Name,
-							"duration_ms", cell.DurationMs,
-							"error", cell.Error,
-						)
-					}
+				if cell.Success {
+					slog.Info("vision matrix cell passed", "preset", preset.Name, "cell", cellNumber, "cell_total", cellsPerPreset, "overall_cell", overallCell, "image", imgType, "prompt", prompt.Name, "duration_ms", cell.DurationMs)
+				} else {
+					slog.Error("vision matrix cell failed", "preset", preset.Name, "cell", cellNumber, "cell_total", cellsPerPreset, "overall_cell", overallCell, "image", imgType, "prompt", prompt.Name, "duration_ms", cell.DurationMs, "error", cell.Error)
+				}
 
-					// Stream cell result immediately.
-					sendEvent("cell_complete", map[string]interface{}{
-						"preset":        preset.Name,
-						"image":         imgT,
-						"prompt":        p.Name,
-						"cell":          cellNumber,
-						"cell_total":    cellsPerPreset,
-						"overall_cell":  overallCell,
-						"overall_total": totalCells,
-						"success":       cell.Success,
-						"duration_ms":   cell.DurationMs,
-						"error":         cell.Error,
-					})
-				}(imgType, prompt, t.id)
+				sendEvent("cell_complete", map[string]interface{}{"preset": preset.Name, "image": imgType, "prompt": prompt.Name, "cell": cellNumber, "cell_total": cellsPerPreset, "overall_cell": overallCell, "overall_total": totalCells, "success": cell.Success, "duration_ms": cell.DurationMs, "error": cell.Error})
 			}
 		}
-		wg.Wait()
 
 		allResults = append(allResults, pr)
 		totalSuccesses += pr.Successes
