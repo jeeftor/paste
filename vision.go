@@ -423,7 +423,13 @@ func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Run analysis synchronously for manual trigger
 	analyzeStart := time.Now()
-	result, err := analyzeImage(id, prompt.Prompt)
+	var result *visionAnalysisResult
+	var err error
+	if prompt.Mode == "scan" {
+		result, err = analyzeImageScan(id, getActiveVisionPreset(), prompt.Prompt)
+	} else {
+		result, err = analyzeImage(id, prompt.Prompt)
+	}
 	analyzeElapsed := time.Since(analyzeStart).Round(time.Millisecond)
 	if err != nil {
 		updateItem(id, func(it *Item) bool {

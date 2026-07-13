@@ -173,7 +173,12 @@ func apiVisionTestMatrixHandler(w http.ResponseWriter, r *http.Request) {
 // runMatrixCell runs one (preset × image × prompt) and returns a MatrixCell.
 func runMatrixCell(tmpID string, preset *VisionPreset, prompt *VisionPrompt) *MatrixCell {
 	start := time.Now()
-	result := analyzeWithPreset(tmpID, preset, prompt.Prompt)
+	var result PresetResult
+	if prompt.Mode == "scan" {
+		result = analyzeWithPresetScan(tmpID, preset, prompt.Prompt)
+	} else {
+		result = analyzeWithPreset(tmpID, preset, prompt.Prompt)
+	}
 	elapsed := time.Since(start).Milliseconds()
 
 	cell := &MatrixCell{

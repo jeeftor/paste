@@ -16,6 +16,7 @@ type VisionPrompt struct {
 	Description string `json:"description"`
 	Prompt      string `json:"prompt"`
 	BuiltIn     bool   `json:"built_in"`
+	Mode        string `json:"mode,omitempty"` // "" = normal, "scan" = tiled multi-pass OCR
 }
 
 var (
@@ -149,6 +150,13 @@ This is a desktop or browser screenshot. Extract ALL visible content:
 - Note any dialogs, popups, notifications, or error messages
 
 Output the JSON only. /no_think`,
+	},
+	{
+		Name:        "scan",
+		Description: "Dense document sweep — tiles tall images into overlapping sections for complete text extraction",
+		BuiltIn:     true,
+		Mode:        "scan",
+		Prompt:      `Transcribe all visible text exactly as it appears. Preserve layout, rows, columns, labels, and line breaks. Include every word, number, and symbol. Do not summarize or skip any content. /no_think`,
 	},
 }
 
