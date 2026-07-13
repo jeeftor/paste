@@ -2439,6 +2439,12 @@ function renderVisionConfig() {
     actions.appendChild(testBtn);
 
     if (!isEnv) {
+      const dupBtn = document.createElement('button');
+      dupBtn.className = 'preset-btn';
+      dupBtn.textContent = 'Duplicate';
+      dupBtn.onclick = () => duplicatePreset(p);
+      actions.appendChild(dupBtn);
+
       const editBtn = document.createElement('button');
       editBtn.className = 'preset-btn';
       editBtn.textContent = 'Edit';
@@ -2521,6 +2527,18 @@ function editPreset(p) {
   document.getElementById('presetFormApiKey').value = p.api_key || '';
   document.getElementById('presetFormDesc').value = p.description || '';
   document.getElementById('presetForm').classList.add('show');
+}
+
+function duplicatePreset(p) {
+  document.getElementById('presetFormMode').value = 'add';
+  document.getElementById('presetFormName').value = '';
+  document.getElementById('presetFormName').disabled = false;
+  document.getElementById('presetFormEndpoint').value = p.endpoint;
+  document.getElementById('presetFormModel').value = p.model;
+  document.getElementById('presetFormApiKey').value = p.api_key || '';
+  document.getElementById('presetFormDesc').value = p.description || '';
+  document.getElementById('presetForm').classList.add('show');
+  document.getElementById('presetFormName').focus();
 }
 
 function hidePresetForm() {
