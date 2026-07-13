@@ -108,6 +108,7 @@ func NewHandler() *http.ServeMux {
 	mux.HandleFunc("/api/upload/complete", apiUploadCompleteHandler)
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/api/version", versionHandler)
+	mux.HandleFunc("/api/update-check", updateCheckHandler)
 	mux.HandleFunc("/api/openapi.json", openapiSpecHandler)
 	mux.HandleFunc("/swagger", swaggerHandler)
 	mux.HandleFunc("/mcp", mcpHandler)

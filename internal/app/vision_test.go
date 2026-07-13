@@ -1365,7 +1365,7 @@ func TestOpenAPISpec(t *testing.T) {
 		t.Fatal("expected paths in spec")
 	}
 	// Check key endpoints are documented
-	for _, path := range []string{"/api/files", "/api/vision/test", "/api/vision/compare", "/api/vision/compare-prompts", "/health"} {
+	for _, path := range []string{"/api/files", "/api/vision/test", "/api/vision/compare", "/api/vision/compare-prompts", "/api/update-check", "/health"} {
 		if _, ok := paths[path]; !ok {
 			t.Errorf("expected path %s in OpenAPI spec", path)
 		}

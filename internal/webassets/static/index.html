@@ -74,6 +74,16 @@ body {
   border-radius: 12px;
   font-family: var(--mono);
 }
+.update-notice {
+  color: var(--accent);
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  border-radius: 12px;
+  padding: 5px 10px;
+  font-size: 12px;
+  text-decoration: none;
+}
+.update-notice:hover { background: rgba(88, 166, 255, 0.18); }
 .header-actions {
   display: flex;
   gap: 12px;
@@ -1033,6 +1043,7 @@ body {
 <div class="header">
   <h1><img src="/icon.svg" class="logo" alt="K"> Klipbord <span class="version-badge" id="versionBadge">{{VERSION}}</span></h1>
   <div class="header-actions">
+    <a class="update-notice" id="updateNotice" hidden target="_blank" rel="noopener">New version available</a>
     <select class="ttl-select" id="ttl">
       <option value="1h">Expires in 1 hour</option>
       <option value="1d">Expires in 1 day</option>
@@ -1467,6 +1478,18 @@ body {
         <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUrl10"></span>/api/version</div>
       </div>
     </div>
+
+    <div class="api-card">
+      <div class="api-card-header">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/update-check</span>
+        <span class="api-desc">Check whether a newer Klipbord release is available</span>
+      </div>
+      <div class="api-card-body">
+        <button class="btn btn-secondary copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="api-example"><span class="curl">curl</span> <span class="url" id="restUpdateUrl"></span>/api/update-check</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1856,6 +1879,8 @@ window.addEventListener('popstate', () => activateTab(tabFromLocation()));
     const el = document.getElementById('restUrl' + i);
     if (el) el.textContent = BASE;
   }
+  const updateURL = document.getElementById('restUpdateUrl');
+  if (updateURL) updateURL.textContent = BASE;
   // Chunked upload URLs
   for (const suffix of ['b', 'c', 'd', 'e']) {
     const el = document.getElementById('restUrl2' + suffix);
@@ -1885,6 +1910,18 @@ window.addEventListener('popstate', () => activateTab(tabFromLocation()));
     '  }\n' +
     '}';
 })();
+
+// --- Update notice ---
+fetch('/api/update-check')
+  .then(response => response.ok ? response.json() : null)
+  .then(update => {
+    if (!update?.update_available || !update.release_url) return;
+    const notice = document.getElementById('updateNotice');
+    notice.href = update.release_url;
+    notice.textContent = `New version available: ${update.latest_version}`;
+    notice.hidden = false;
+  })
+  .catch(() => {});
 
 // --- Copy code blocks ---
 function copyCode(btn) {
