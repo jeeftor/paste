@@ -1251,7 +1251,15 @@ func TestVisionCompareWithItemID(t *testing.T) {
 
 func TestVisionCompareHeuristicScoring(t *testing.T) {
 	server, _, mockServer := setupVisionTestServer(t, `{"image_type":"terminal","text":"hello world","description":"A terminal"}`)
-	_ = mockServer
+
+	// Point all presets to the mock server so they all succeed
+	mockEndpoint := mockServer.URL + "/v1/chat/completions"
+	visionConfigMu.Lock()
+	for _, p := range visionConfig.Presets {
+		p.Endpoint = mockEndpoint
+		p.APIKey = ""
+	}
+	visionConfigMu.Unlock()
 
 	// The mock server returns the same response for all presets
 	// so all should succeed and get heuristic scores
