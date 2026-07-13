@@ -175,7 +175,11 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 		itemID, len(imgData), len(promptText), visionEndpoint)
 
 	b64 := base64.StdEncoding.EncodeToString(imgData)
-	dataURL := fmt.Sprintf("data:image/png;base64,%s", b64)
+	mimeType := http.DetectContentType(imgData)
+	if !strings.HasPrefix(mimeType, "image/") {
+		mimeType = "image/png"
+	}
+	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
 
 	reqBody := visionChatRequest{
 		Model: visionModel,

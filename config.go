@@ -28,6 +28,7 @@ type VisionPreset struct {
 type VisionConfigFile struct {
 	Presets       map[string]*VisionPreset `json:"presets"`
 	ActivePreset  string                   `json:"active_preset"`
+	Enabled       bool                     `json:"enabled"`
 }
 
 var (
@@ -137,7 +138,8 @@ func initVisionConfig() {
 	// Set global vars from active config
 	applyActiveConfigLocked()
 
-	// Handle VISION_ENABLED separately — it controls whether vision runs at all
+	// Load enabled state from config file, then override with env var if set
+	visionEnabled = visionConfig.Enabled
 	if envEnabled != "" {
 		visionEnabled = envEnabled == "true"
 	}
@@ -385,6 +387,8 @@ func apiVisionConfigHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		visionConfigMu.Lock()
 		visionEnabled = *req.Enabled
+		visionConfig.Enabled = *req.Enabled
+		saveVisionConfigLocked()
 		visionConfigMu.Unlock()
 		writeJSON(w, map[string]interface{}{
 			"enabled": *req.Enabled,

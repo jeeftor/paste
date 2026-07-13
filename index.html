@@ -601,6 +601,28 @@ body {
 }
 .empty-icon { font-size: 64px; opacity: 0.2; margin-bottom: 16px; }
 
+/* Image lightbox */
+.img-lightbox {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.9);
+  z-index: 400;
+  cursor: zoom-out;
+  align-items: center;
+  justify-content: center;
+}
+.img-lightbox.show { display: flex; }
+.img-lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  cursor: default;
+}
+.item-thumb img { cursor: zoom-in; }
+
 /* Modal for text view */
 .modal-overlay {
   display: none;
@@ -1685,6 +1707,11 @@ body {
   </div>
 </div>
 
+<!-- Image lightbox -->
+<div class="img-lightbox" id="imgLightbox" onclick="closeImageLightbox()">
+  <img id="imgLightboxImg" src="" alt="" onclick="event.stopPropagation()">
+</div>
+
 <!-- Camera modal -->
 <div class="camera-modal" id="cameraModal">
   <video id="cameraVideo" autoplay playsinline></video>
@@ -2334,6 +2361,20 @@ function viewText(id) {
       document.getElementById('modal').classList.add('show');
     });
 }
+
+function openImageLightbox(src) {
+  const lb = document.getElementById('imgLightbox');
+  const img = document.getElementById('imgLightboxImg');
+  img.src = src;
+  lb.classList.add('show');
+  document.addEventListener('keydown', _lightboxEsc);
+}
+function closeImageLightbox() {
+  document.getElementById('imgLightbox').classList.remove('show');
+  document.getElementById('imgLightboxImg').src = '';
+  document.removeEventListener('keydown', _lightboxEsc);
+}
+function _lightboxEsc(e) { if (e.key === 'Escape') closeImageLightbox(); }
 
 function closeModal() {
   document.getElementById('modal').classList.remove('show');
@@ -3108,7 +3149,7 @@ function renderItemCard(item, isPersistent) {
   if (item.type === 'text') {
     thumb = `<div class="item-thumb"><div class="code-preview" id="preview-${item.id}">Loading...</div></div>`;
   } else if (item.mime_type && item.mime_type.startsWith('image/')) {
-    thumb = `<div class="item-thumb"><img src="/f/${item.id}" alt="${escapeHtml(item.name)}" loading="lazy"></div>`;
+    thumb = `<div class="item-thumb"><img src="/f/${item.id}" alt="${escapeHtml(item.name)}" loading="lazy" onclick="openImageLightbox('/f/${item.id}')"></div>`;
   } else {
     thumb = `<div class="item-thumb"><div class="file-icon">📄</div></div>`;
   }
