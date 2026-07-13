@@ -1566,12 +1566,13 @@ body {
         <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" id="testVisionBtn" onclick="testVisionPipeline()">Test Vision Pipeline</button>
         <button class="btn btn-primary" style="font-size:13px;padding:6px 14px" id="compareVisionBtn" onclick="compareVisionPresets()">Compare All Presets</button>
         <select id="testVisionType" style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px">
-          <option value="terminal">Terminal</option>
-          <option value="code">Code</option>
-          <option value="document">Document</option>
-          <option value="diagram">Diagram</option>
+          <option value="all">All Images</option>
+          <option value="terminal">Terminal only</option>
+          <option value="code">Code only</option>
+          <option value="document">Document only</option>
+          <option value="diagram">Diagram only</option>
         </select>
-        <span style="color:var(--text-muted);font-size:12px">Test uses one preset; Compare runs all presets and ranks results</span>
+        <span style="color:var(--text-muted);font-size:12px">Test runs the active preset on sample images; Compare runs all presets</span>
       </div>
       <div id="visionTestResult" style="display:none;margin-top:12px"></div>
       <div id="visionCompareResult" style="display:none;margin-top:12px"></div>
@@ -2540,47 +2541,158 @@ async function testPreset(name, btn) {
 async function testVisionPipeline() {
   const btn = document.getElementById('testVisionBtn');
   const resultDiv = document.getElementById('visionTestResult');
-  const imageType = document.getElementById('testVisionType').value;
+  const sel = document.getElementById('testVisionType');
+  const imageType = sel.value;
   const originalText = btn.textContent;
   btn.textContent = 'Running...';
   btn.disabled = true;
   resultDiv.style.display = 'none';
 
-  try {
-    const resp = await fetch('/api/vision/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_type: imageType })
-    });
-    const result = await resp.json();
+  const imageTypes = imageType === 'all'
+    ? ['terminal', 'code', 'document', 'diagram']
+    : [imageType];
 
-    let html = '';
-    if (result.success) {
-      html = `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-card)">` +
-        `<div style="display:flex;gap:16px;align-items:flex-start">` +
-        `<img src="data:image/png;base64,${result.image_b64}" style="width:150px;border-radius:4px;border:1px solid var(--border)" />` +
-        `<div style="flex:1">` +
-        `<div style="color:var(--accent);font-size:13px;margin-bottom:8px">✓ ${escapeHtml(result.message)} (${result.latency})</div>` +
-        `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Sample: ${escapeHtml(result.sample_type)} | Prompt: ${escapeHtml(result.prompt_used)} | Preset: ${escapeHtml(result.preset)} | Model: ${escapeHtml(result.model)}</div>` +
-        `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Image type: ${escapeHtml(result.image_type || '')} — ${escapeHtml(result.description || '')}</div>` +
-        `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Extracted text:</div>` +
-        `<pre style="font-size:12px;background:var(--bg);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;margin:0">${escapeHtml(result.text || '')}</pre>` +
-        `</div></div></div>`;
-    } else {
-      html = `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-card)">` +
-        `<div style="color:#f87171;font-size:13px">✗ ${escapeHtml(result.message)}</div>` +
-        (result.latency ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Latency: ${result.latency}</div>` : '') +
-        `</div>`;
-    }
-    resultDiv.innerHTML = html;
-    resultDiv.style.display = 'block';
-  } catch (e) {
-    resultDiv.innerHTML = `<div style="color:#f87171;font-size:13px">✗ Request failed</div>`;
-    resultDiv.style.display = 'block';
-  } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
+  // Show loading state with placeholders
+  let loadingHtml = '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-card)">';
+  loadingHtml += `<div style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Testing ${imageTypes.length} image${imageTypes.length > 1 ? 's' : ''} through the active preset...</div>`;
+  loadingHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+  for (const t of imageTypes) {
+    loadingHtml += `<div id="visionTestCard_${t}" style="border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--bg)">` +
+      `<div style="font-size:13px;font-weight:600;margin-bottom:4px">${t}</div>` +
+      `<div style="font-size:12px;color:var(--text-muted)">Running...</div>` +
+      `</div>`;
   }
+  loadingHtml += '</div></div>';
+  resultDiv.innerHTML = loadingHtml;
+  resultDiv.style.display = 'block';
+
+  // Run all requests in parallel
+  const promises = imageTypes.map(async (t) => {
+    try {
+      const resp = await fetch('/api/vision/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_type: t })
+      });
+      return { type: t, result: await resp.json() };
+    } catch (e) {
+      return { type: t, result: { success: false, message: 'Request failed' } };
+    }
+  });
+
+  const responses = await Promise.all(promises);
+
+  // Score each result
+  let passCount = 0;
+  let totalLatencyMs = 0;
+  let totalChars = 0;
+
+  for (const { type, result } of responses) {
+    const card = document.getElementById(`visionTestCard_${type}`);
+    if (!card) continue;
+
+    if (!result.success) {
+      card.innerHTML = buildVisionTestCardHTML(type, result, 0, 'fail');
+      continue;
+    }
+
+    // Simple scoring: did it extract text? correct image type? reasonable length?
+    let score = 0;
+    let scoreParts = [];
+
+    // Text extracted (40 pts)
+    if (result.text && result.text.trim().length > 0) {
+      const lenScore = Math.min(result.text.length / 20, 40);
+      score += lenScore;
+      scoreParts.push(`text: ${result.text.length} chars`);
+      totalChars += result.text.length;
+    } else {
+      scoreParts.push('text: none');
+    }
+
+    // Image type correctly detected (30 pts)
+    if (result.image_type === type) {
+      score += 30;
+      scoreParts.push(`type: ✓`);
+    } else if (result.image_type && result.image_type !== 'other') {
+      score += 10;
+      scoreParts.push(`type: ${result.image_type}`);
+    } else {
+      scoreParts.push(`type: ?`);
+    }
+
+    // Has description (15 pts)
+    if (result.description && result.description !== 'Raw model output (JSON parsing failed)') {
+      score += 15;
+      scoreParts.push(`desc: ✓`);
+    }
+
+    // No refusal markers (15 pts)
+    const lower = (result.text || '').toLowerCase();
+    if (!lower.includes('i cannot') && !lower.includes("i can't") &&
+        !lower.includes('unable to') && !lower.includes("i'm unable")) {
+      score += 15;
+      scoreParts.push(`no refusal: ✓`);
+    } else {
+      scoreParts.push(`refusal: ✗`);
+    }
+
+    if (result.latency) {
+      const ms = parseFloat(result.latency);
+      if (!isNaN(ms)) totalLatencyMs += ms;
+    }
+
+    passCount++;
+    card.innerHTML = buildVisionTestCardHTML(type, result, score, 'pass', scoreParts);
+  }
+
+  // Update header with summary
+  const headerDiv = resultDiv.firstElementChild.firstElementChild;
+  if (headerDiv) {
+    const all = imageTypes.length;
+    headerDiv.innerHTML = `Tested ${all} image${all > 1 ? 's' : ''}: ${passCount}/${all} passed` +
+      (totalLatencyMs > 0 ? ` | ${totalChars} chars total | avg ${(totalLatencyMs / passCount).toFixed(0)}ms` : '');
+  }
+
+  btn.textContent = originalText;
+  btn.disabled = false;
+}
+
+function buildVisionTestCardHTML(type, result, score, status, scoreParts) {
+  const isPass = status === 'pass';
+  const borderColor = isPass ? 'var(--accent)' : '#f87171';
+  const scoreColor = score >= 80 ? 'var(--accent)' : score >= 50 ? 'var(--text)' : '#f87171';
+
+  let html = `<div style="font-size:13px;font-weight:600;margin-bottom:4px;color:${borderColor}">` +
+    `${isPass ? '✓' : '✗'} ${type}</div>`;
+
+  if (isPass && result.image_b64) {
+    html += `<img src="data:image/png;base64,${result.image_b64}" style="width:100%;max-width:200px;border-radius:4px;border:1px solid var(--border);margin-bottom:6px" />`;
+  }
+
+  html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Score: <span style="color:${scoreColor};font-weight:600">${score.toFixed(0)}/100</span></div>`;
+
+  if (scoreParts) {
+    html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">${scoreParts.join(' | ')}</div>`;
+  }
+
+  if (result.latency) {
+    html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Latency: ${escapeHtml(result.latency)}</div>`;
+  }
+
+  if (!isPass) {
+    html += `<div style="font-size:12px;color:#f87171">${escapeHtml(result.message || 'failed')}</div>`;
+  } else {
+    html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px">Detected: ${escapeHtml(result.image_type || '?')}</div>`;
+    if (result.description) {
+      html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${escapeHtml(result.description)}</div>`;
+    }
+    const text = result.text || '';
+    const preview = text.length > 150 ? text.substring(0, 150) + '...' : text;
+    html += `<pre style="font-size:11px;background:var(--bg);padding:6px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;margin:0;max-height:100px">${escapeHtml(preview)}</pre>`;
+  }
+
+  return html;
 }
 
 async function compareVisionPresets() {
