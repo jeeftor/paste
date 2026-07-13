@@ -95,6 +95,7 @@ func NewHandler() *http.ServeMux {
 	mux.HandleFunc("/api/vision/test", apiVisionTestHandler)
 	mux.HandleFunc("/api/vision/test-matrix/status", apiVisionTestMatrixStatusHandler)
 	mux.HandleFunc("/api/vision/test-matrix", apiVisionTestMatrixHandler)
+	mux.HandleFunc("/api/vision/runtime", apiVisionRuntimeHandler)
 	mux.HandleFunc("/api/vision/compare", apiVisionCompareHandler)
 	mux.HandleFunc("/api/vision/compare-prompts", apiVisionComparePromptsHandler)
 	mux.HandleFunc("/api/prompts", apiPromptsHandler)

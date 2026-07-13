@@ -3144,6 +3144,7 @@ let _matrixMeta = null; // {presets, image_types, prompts, total_cells}
 let _matrixCounts = {};  // preset → {done, success}
 let _matrixActiveCells = {}; // preset → {cell: {image, prompt}}
 let _matrixSource = null;
+let _matrixRuntimeTimer = null;
 
 function testVisionMatrix({ resume = false } = {}) {
   if (_matrixSource) return;
@@ -3157,6 +3158,7 @@ function testVisionMatrix({ resume = false } = {}) {
   _matrixMeta = null;
   _matrixCounts = {};
   _matrixActiveCells = {};
+  stopMatrixRuntimePolling();
 
   const es = new EventSource('/api/vision/test-matrix');
   _matrixSource = es;
@@ -3167,6 +3169,8 @@ function testVisionMatrix({ resume = false } = {}) {
     _matrixActiveCells = {};
     resultDiv.innerHTML = buildMatrixSkeleton(_matrixMeta);
     updateMatrixHeader(0, _matrixMeta.total_cells);
+    pollMatrixRuntime();
+    _matrixRuntimeTimer = setInterval(pollMatrixRuntime, 1000);
   });
 
   es.addEventListener('preset_start', e => {
@@ -3259,6 +3263,7 @@ function testVisionMatrix({ resume = false } = {}) {
     btn.textContent = 'Test All Models ★';
     btn.disabled = false;
     _matrixSource = null;
+    stopMatrixRuntimePolling();
     es.close();
   });
 
@@ -3270,6 +3275,7 @@ function testVisionMatrix({ resume = false } = {}) {
     btn.textContent = 'Test All Models ★';
     btn.disabled = false;
     _matrixSource = null;
+    stopMatrixRuntimePolling();
     es.close();
   });
 
@@ -3280,6 +3286,37 @@ function testVisionMatrix({ resume = false } = {}) {
       _matrixSource = null;
     }
   };
+}
+
+function stopMatrixRuntimePolling() {
+  if (_matrixRuntimeTimer) clearInterval(_matrixRuntimeTimer);
+  _matrixRuntimeTimer = null;
+}
+
+async function pollMatrixRuntime() {
+  try {
+    const response = await fetch('/api/vision/runtime');
+    if (!response.ok) return;
+    const { runtimes } = await response.json();
+    for (const [preset, runtime] of Object.entries(runtimes || {})) {
+      const target = document.getElementById('preset-runtime-' + CSS.escape(preset));
+      if (target) target.innerHTML = renderRuntimeStatus(runtime);
+    }
+  } catch (_) {}
+}
+
+function renderRuntimeStatus(runtime) {
+  if (runtime.state === 'unknown') return '<span style="color:var(--text-muted)">Runtime status unavailable</span>';
+  const models = runtime.models?.length
+    ? `Loaded: ${runtime.models.map(model => escapeHtml(model.name)).join(', ')}`
+    : 'No models loaded';
+  const system = runtime.system
+    ? ` · RAM ${runtime.system.memory_gb?.toFixed(1) || '—'} GiB · GPU ${runtime.system.gpu_percent?.toFixed(0) || '—'}% · VRAM ${runtime.system.vram_gb?.toFixed(1) || '—'} GiB`
+    : '';
+  const ollama = runtime.models?.[0]?.vram_bytes
+    ? ` · model VRAM ${(runtime.models[0].vram_bytes / 1073741824).toFixed(1)} GiB`
+    : '';
+  return `<span style="color:var(--text-muted)">${escapeHtml(runtime.provider)} · ${models}${system}${ollama}</span>`;
 }
 
 async function resumeMatrixIfRunning() {
@@ -3310,6 +3347,7 @@ function buildMatrixSkeleton(meta) {
     html += `<div style="font-weight:600;font-size:13px" id="preset-hdr-${CSS.escape(preset)}">${escapeHtml(preset)}</div>`;
     html += `<div id="preset-status-${CSS.escape(preset)}" style="font-size:12px;color:var(--text-muted)">Queued</div>`;
     html += `</div>`;
+    html += `<div id="preset-runtime-${CSS.escape(preset)}" style="font-size:11px;margin:-2px 0 6px">Checking runtime…</div>`;
     html += `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px;width:100%">`;
     html += `<thead><tr><th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border);color:var(--text-muted);white-space:nowrap">image \\ prompt</th>`;
     for (const p of prompts) {

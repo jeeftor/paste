@@ -253,6 +253,9 @@ func buildOpenAPISpec() map[string]interface{} {
 					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Ranked prompt comparison results"}},
 				},
 			},
+			"/api/vision/runtime": map[string]interface{}{
+				"get": map[string]interface{}{"summary": "Get configured vision providers' loaded-model and resource status", "responses": map[string]interface{}{"200": map[string]interface{}{"description": "Runtime status by vision preset"}}},
+			},
 			"/health": map[string]interface{}{
 				"get": map[string]interface{}{"summary": "Health check", "responses": map[string]interface{}{"200": map[string]interface{}{"description": "Server healthy"}}},
 			},
