@@ -93,6 +93,7 @@ func setupVisionTestServer(t *testing.T, mockResponse string) (*httptest.Server,
 	mux.HandleFunc("/api/config/vision/", apiVisionConfigHandler)
 	mux.HandleFunc("/api/vision/test", apiVisionTestHandler)
 	mux.HandleFunc("/api/vision/compare", apiVisionCompareHandler)
+	mux.HandleFunc("/api/vision/compare-prompts", apiVisionComparePromptsHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)
 	mux.HandleFunc("/api/text/", apiTextItemHandler)
 	mux.HandleFunc("/api/upload", apiUploadHandler)
@@ -1341,5 +1342,110 @@ func TestOpenAPISpec(t *testing.T) {
 		if _, ok := paths[path]; !ok {
 			t.Errorf("expected path %s in OpenAPI spec", path)
 		}
+	}
+}
+
+// --- Prompt Compare Tests ---
+
+func TestVisionComparePromptsAPI(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"terminal","text":"hello world","description":"A terminal"}`)
+
+	resp, err := http.Post(server.URL+"/api/vision/compare-prompts", "application/json",
+		strings.NewReader(`{"image_type":"terminal"}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	if result["total_prompts"] == nil {
+		t.Fatal("expected total_prompts in response")
+	}
+	results, ok := result["results"].([]interface{})
+	if !ok {
+		t.Fatal("expected results array")
+	}
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	// Should have at least the default prompt
+	tp, _ := result["total_prompts"].(float64)
+	if tp < 1 {
+		t.Error("expected at least 1 prompt")
+	}
+}
+
+func TestVisionComparePromptsDisabled(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"terminal","text":"test","description":"test"}`)
+	visionEnabled = false
+	defer func() { visionEnabled = true }()
+
+	resp, err := http.Post(server.URL+"/api/vision/compare-prompts", "application/json",
+		strings.NewReader(`{"image_type":"terminal"}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	if result["success"] != false {
+		t.Error("expected success=false when vision disabled")
+	}
+}
+
+func TestMCPComparePrompts(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"terminal","text":"hello world","description":"A terminal"}`)
+
+	result := mcpCall(t, server, "compare_prompts", map[string]interface{}{
+		"image_type": "terminal",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("compare_prompts returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "Prompt comparison") {
+		t.Errorf("text doesn't contain 'Prompt comparison': %s", text)
+	}
+	if !strings.Contains(text, "Winner") {
+		t.Errorf("text should contain 'Winner': %s", text)
+	}
+}
+
+func TestMCPComparePromptsDisabled(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"terminal","text":"test","description":"test"}`)
+	visionEnabled = false
+	defer func() { visionEnabled = true }()
+
+	result := mcpCall(t, server, "compare_prompts", map[string]interface{}{})
+
+	if result["error"] == nil {
+		t.Fatal("expected error when vision disabled")
+	}
+}
+
+func TestVisionTestWithPromptOverride(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"terminal","text":"hello","description":"test"}`)
+
+	// Test terminal image with explicit "default" prompt
+	resp, err := http.Post(server.URL+"/api/vision/test", "application/json",
+		strings.NewReader(`{"image_type":"terminal","prompt":"default"}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	if !result["success"].(bool) {
+		t.Errorf("expected success=true: %v", result["message"])
+	}
+	if result["prompt_used"] != "default" {
+		t.Errorf("expected prompt_used=default, got %v", result["prompt_used"])
+	}
+	if result["sample_type"] != "terminal" {
+		t.Errorf("expected sample_type=terminal, got %v", result["sample_type"])
 	}
 }

@@ -141,6 +141,7 @@ func main() {
 	mux.HandleFunc("/api/config/vision/", apiVisionConfigHandler)
 	mux.HandleFunc("/api/vision/test", apiVisionTestHandler)
 	mux.HandleFunc("/api/vision/compare", apiVisionCompareHandler)
+	mux.HandleFunc("/api/vision/compare-prompts", apiVisionComparePromptsHandler)
 	mux.HandleFunc("/api/prompts", apiPromptsHandler)
 	mux.HandleFunc("/api/prompts/", apiPromptHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)

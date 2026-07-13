@@ -362,6 +362,23 @@ var mcpTools = []MCPTool{
 			},
 		},
 	},
+	{
+		Name:        "compare_prompts",
+		Description: "Run a single image through ALL available vision prompts (default, terminal, code, document, diagram, screenshot, and any custom prompts) and rank by quality. Answers the question: 'Is the default prompt good enough, or do specialized prompts help?' Returns ranked results with scores, char counts, and extracted text.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"image_type": map[string]any{
+					"type":        "string",
+					"description": "Sample image type: terminal (default), code, document, diagram, or screenshot. Ignored if item_id is provided.",
+				},
+				"item_id": map[string]any{
+					"type":        "string",
+					"description": "Existing image item ID to test. If omitted, uses a sample image.",
+				},
+			},
+		},
+	},
 }
 
 func mcpHandler(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +591,11 @@ func handleMCPToolCall(name string, args map[string]any) (interface{}, *MCPError
 		itemID, _ := args["item_id"].(string)
 		promptName, _ := args["prompt"].(string)
 		return mcpCompareVision(imageType, itemID, promptName)
+
+	case "compare_prompts":
+		imageType, _ := args["image_type"].(string)
+		itemID, _ := args["item_id"].(string)
+		return mcpComparePrompts(imageType, itemID)
 
 	default:
 		return nil, &MCPError{Code: -32601, Message: "Unknown tool: " + name}

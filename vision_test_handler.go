@@ -57,26 +57,31 @@ func apiVisionTestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional image_type from body (empty body = default/terminal)
+	// Parse optional image_type and prompt from body
 	imageType := "terminal"
+	promptOverride := ""
 	if r.Body != nil {
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err == nil && len(bodyBytes) > 0 {
 			var req struct {
 				ImageType string `json:"image_type"`
+				Prompt    string `json:"prompt"`
 			}
-			if json.Unmarshal(bodyBytes, &req) == nil && req.ImageType != "" {
-				imageType = req.ImageType
+			if json.Unmarshal(bodyBytes, &req) == nil {
+				if req.ImageType != "" {
+					imageType = req.ImageType
+				}
+				promptOverride = req.Prompt
 			}
 		}
 	}
 
 	sampleData, _ := getSampleImage(imageType)
 
-	// Use matching prompt if not specified
-	promptName := imageType
-	if promptName == "terminal" {
-		promptName = "terminal"
+	// Use prompt override if specified, otherwise match prompt to image type
+	promptName := promptOverride
+	if promptName == "" {
+		promptName = imageType
 	}
 
 	prompt, ok := getPrompt(promptName)

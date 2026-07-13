@@ -6,7 +6,7 @@ Self-hosted paste/file-drop service with web UI, REST API, MCP server, and AI vi
 
 - **Web UI** — Ctrl+V image paste, drag-and-drop, text snippets, syntax highlighting, browse gallery
 - **REST API** — list, upload, download, delete, pin files and text snippets
-- **MCP Server** — 12 tool calls for AI agents (Hermes, Devin, Claude Code, etc.)
+- **MCP Server** — 13 tool calls for AI agents (Hermes, Devin, Claude Code, etc.)
 - **Vision Pre-processing** — automatically OCR/describe uploaded images using a local or remote vision LLM
 - **Configurable Prompts** — 6 built-in vision prompt templates (terminal, code, document, diagram, screenshot, default) plus custom user-defined prompts via REST API
 - **Multi-Prompt Analysis** — analyze the same image with multiple prompts, all results stored side-by-side
@@ -18,7 +18,7 @@ Self-hosted paste/file-drop service with web UI, REST API, MCP server, and AI vi
 - **Files on disk** — plain files, directly readable by agents with filesystem access
 - **Unique IDs** — short 6-character IDs for every item
 - **Single Go binary** — no runtime dependencies
-- **Tested** — 98 tests with 55.6% code coverage
+- **Tested** — 103 tests with 57.9% code coverage
 
 ## Quick Start
 
@@ -244,6 +244,11 @@ curl -X POST -H 'Content-Type: application/json' -d '{"image_type":"terminal"}' 
 # Compare using an existing uploaded image
 curl -X POST -H 'Content-Type: application/json' -d '{"item_id":"abc123"}' /api/vision/compare
 
+# Compare prompts: run one image through ALL prompts, rank by quality
+curl -X POST -H 'Content-Type: application/json' -d '{"image_type":"terminal"}' /api/vision/compare-prompts
+# → {"total_prompts":6,"success_count":6,"winner":"terminal","results":[...]}
+# Tests whether the default prompt is good enough or specialized prompts help
+
 # OpenAPI 3.0 spec (machine-readable API definition)
 curl /api/openapi.json
 ```
@@ -273,6 +278,7 @@ MCP endpoint: `https://paste.example.com/mcp`
 | `test_vision_preset` | Test connectivity to a preset (omit preset to test active) |
 | `test_vision` | Run the full vision pipeline on a built-in sample image (terminal, code, document, diagram) |
 | `compare_vision` | Run an image through ALL presets, compare & rank results (LLM judge or heuristic) |
+| `compare_prompts` | Run one image through ALL prompts, compare & rank (is default good enough?) |
 
 ### Vision MCP Tool Examples
 
@@ -321,6 +327,9 @@ MCP endpoint: `https://paste.example.com/mcp`
 
 // Compare using an existing uploaded image
 {"name": "compare_vision", "arguments": {"item_id": "abc123"}}
+
+// Compare prompts: run one image through ALL prompts, rank by quality
+{"name": "compare_prompts", "arguments": {"image_type": "terminal"}}
 ```
 
 ## Direct Access
