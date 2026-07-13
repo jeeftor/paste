@@ -259,6 +259,9 @@ func buildOpenAPISpec() map[string]interface{} {
 			"/api/version": map[string]interface{}{
 				"get": map[string]interface{}{"summary": "Get server version", "responses": map[string]interface{}{"200": map[string]interface{}{"description": "Version info"}}},
 			},
+			"/api/update-check": map[string]interface{}{
+				"get": map[string]interface{}{"summary": "Check whether a newer Klipbord release is available", "responses": map[string]interface{}{"200": map[string]interface{}{"description": "Current and latest release versions"}}},
+			},
 		},
 		"components": map[string]interface{}{
 			"schemas": map[string]interface{}{
