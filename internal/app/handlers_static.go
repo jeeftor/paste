@@ -6,11 +6,15 @@ import (
 	"strings"
 )
 
-func rootHandler(w http.ResponseWriter, r *http.Request) {
+func redirectToClipHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
+	http.Redirect(w, r, "/clip", http.StatusFound)
+}
+
+func webUIHandler(w http.ResponseWriter, _ *http.Request) {
 	html := strings.Replace(string(assets.IndexHTML), "{{VERSION}}", version, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(html))

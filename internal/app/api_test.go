@@ -23,7 +23,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, string) {
 	visionEnabled = false // disable vision for API tests unless explicitly enabled
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/", redirectToClipHandler)
 	mux.HandleFunc("/api/version", versionHandler)
 	mux.HandleFunc("/api/health", healthHandler)
 	mux.HandleFunc("/api/files", apiFilesHandler)
@@ -481,19 +481,6 @@ func TestAnalyzeVisionDisabled(t *testing.T) {
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("analyze with vision disabled status = %d, expected 503", resp.StatusCode)
 	}
-}
-
-func TestRootHandler(t *testing.T) {
-	server, _ := setupTestServer(t)
-	resp := doRequest(t, server, "GET", "/", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("root status = %d", resp.StatusCode)
-	}
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "text/html") {
-		t.Errorf("content-type = %q, expected text/html", ct)
-	}
-	resp.Body.Close()
 }
 
 func TestRootHandlerNotFound(t *testing.T) {
