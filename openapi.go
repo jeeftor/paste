@@ -139,7 +139,7 @@ func buildOpenAPISpec() map[string]interface{} {
 					"summary": "Trigger vision analysis on an image",
 					"parameters": []map[string]interface{}{
 						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
-						{"name": "prompt", "in": "query", "schema": map[string]interface{}{"type": "string"}, "description": "Prompt name (default, terminal, code, document, diagram, or custom)"},
+						{"name": "prompt", "in": "query", "schema": map[string]interface{}{"type": "string"}, "description": "Prompt name (default, terminal, code, document, diagram, screenshot, or custom)"},
 					},
 					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Analysis result"}},
 				},
@@ -218,7 +218,8 @@ func buildOpenAPISpec() map[string]interface{} {
 			"/api/vision/test": map[string]interface{}{
 				"post": map[string]interface{}{
 					"summary": "Run full vision pipeline on a built-in sample image",
-					"requestBody": map[string]interface{}{"content": map[string]interface{}{"application/json": map[string]interface{}{"schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"image_type": map[string]interface{}{"type": "string", "description": "terminal (default), code, document, diagram"}}}}}},
+					"requestBody": map[string]interface{}{"content": map[string]interface{}{"application/json": map[string]interface{}{"schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"image_type": map[string]interface{}{"type": "string", "description": "terminal (default), code, document, diagram, screenshot"},
+					"prompt":     map[string]interface{}{"type": "string", "description": "Prompt name override (default: matches image_type)"}}}}}},
 					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Vision analysis result with extracted text"}},
 				},
 			},
@@ -226,11 +227,21 @@ func buildOpenAPISpec() map[string]interface{} {
 				"post": map[string]interface{}{
 					"summary": "Run an image through all presets, compare results, and rank by quality",
 					"requestBody": map[string]interface{}{"content": map[string]interface{}{"application/json": map[string]interface{}{"schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{
-						"image_type": map[string]interface{}{"type": "string", "description": "Sample image type: terminal, code, document, diagram. If omitted, requires item_id."},
+						"image_type": map[string]interface{}{"type": "string", "description": "Sample image type: terminal, code, document, diagram, screenshot. If omitted, requires item_id."},
 						"item_id":    map[string]interface{}{"type": "string", "description": "Existing image item ID to analyze. If omitted, uses sample image_type."},
 						"prompt":     map[string]interface{}{"type": "string", "description": "Prompt name to use (default: 'default')"},
 					}}}}},
 					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Ranked comparison results from all presets"}},
+				},
+			},
+			"/api/vision/compare-prompts": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary": "Run one image through ALL prompts, compare and rank by quality",
+					"requestBody": map[string]interface{}{"content": map[string]interface{}{"application/json": map[string]interface{}{"schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{
+						"image_type": map[string]interface{}{"type": "string", "description": "Sample image type: terminal (default), code, document, diagram, screenshot. Ignored if item_id is provided."},
+						"item_id":    map[string]interface{}{"type": "string", "description": "Existing image item ID to test. If omitted, uses a sample image."},
+					}}}}},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Ranked prompt comparison results"}},
 				},
 			},
 			"/health": map[string]interface{}{

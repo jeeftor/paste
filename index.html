@@ -1090,8 +1090,11 @@ body {
     <div class="mcp-info-banner">
       <h3>REST API</h3>
       <p>All endpoints are open — no auth required. Base URL: <code id="restBaseUrl"></code></p>
-      <p style="margin-top:8px;">
-        <a href="/api/openapi.json" target="_blank" style="color:var(--accent); text-decoration:none; font-size:13px;">
+      <p style="margin-top:8px;display:flex;gap:16px;align-items:center">
+        <a href="/swagger" target="_blank" style="color:var(--accent); text-decoration:none; font-size:13px;font-weight:600">
+          Swagger UI (Interactive API Docs)
+        </a>
+        <a href="/api/openapi.json" target="_blank" style="color:var(--text-muted); text-decoration:none; font-size:12px">
           OpenAPI 3.0 Spec (JSON)
         </a>
       </p>

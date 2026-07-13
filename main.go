@@ -18,6 +18,9 @@ import (
 //go:embed index.html
 var indexHTML []byte
 
+//go:embed swagger.html
+var swaggerHTML []byte
+
 //go:embed manifest.json
 var manifestJSON []byte
 
@@ -154,6 +157,10 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/api/version", versionHandler)
 	mux.HandleFunc("/api/openapi.json", openapiSpecHandler)
+	mux.HandleFunc("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(swaggerHTML)
+	})
 
 	// MCP endpoint
 	mux.HandleFunc("/mcp", mcpHandler)
@@ -639,6 +646,10 @@ func apiTextHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiTextItemHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/text/")
 	if id == "" {
 		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
@@ -892,6 +903,10 @@ func apiUploadChunkHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiUploadStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
 	uploadID := strings.TrimPrefix(r.URL.Path, "/api/upload/status/")
 	if uploadID == "" {
 		http.Error(w, `{"error":"upload_id required"}`, http.StatusBadRequest)
@@ -1078,6 +1093,10 @@ func chunkSweeper() {
 }
 
 func directFileHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/f/")
 	if id == "" {
 		http.NotFound(w, r)
@@ -1095,6 +1114,10 @@ func directFileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func directTextHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/t/")
 	if id == "" {
 		http.NotFound(w, r)
