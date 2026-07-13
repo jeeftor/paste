@@ -3244,7 +3244,12 @@ function testVisionMatrix({ resume = false } = {}) {
 
   es.addEventListener('model_unloaded', e => {
     const d = JSON.parse(e.data);
-    setPresetStatus(d.preset, `Unload request acknowledged (${d.status})`, 'var(--success)');
+    setPresetStatus(d.preset, d.confirmed ? `Model unloaded (${d.status})` : `Unload request acknowledged (${d.status})`, 'var(--success)');
+  });
+
+  es.addEventListener('model_unload_wait', e => {
+    const d = JSON.parse(e.data);
+    setPresetStatus(d.preset, `Waiting for memory release (${Math.ceil(d.timeout_ms / 1000)}s remaining)…`, '#f0a500');
   });
 
   es.addEventListener('model_unload_failed', e => {

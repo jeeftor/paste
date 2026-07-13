@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -125,7 +126,7 @@ var (
 const matrixConcurrency = 3
 
 // modelWarmupTimeout is how long we wait for a model to load on first request.
-const modelWarmupTimeout = 120 * time.Second
+var modelWarmupTimeout = 120 * time.Second
 
 var allSampleImageTypes = []string{"terminal", "code", "document", "diagram", "screenshot"}
 
@@ -492,7 +493,6 @@ func runVisionMatrix(run *matrixRun, presets []*VisionPreset, prompts []*VisionP
 			"preset": preset.Name,
 			"model":  preset.Model,
 		})
-		time.Sleep(2 * time.Second)
 		unloadStarted := time.Now()
 		status, err := tryUnloadModel(preset)
 		if err != nil {
@@ -510,6 +510,9 @@ func runVisionMatrix(run *matrixRun, presets []*VisionPreset, prompts []*VisionP
 			})
 			continue
 		}
+		confirmed := waitForModelUnload(preset, modelUnloadTimeout, func(elapsed time.Duration) {
+			sendEvent("model_unload_wait", map[string]interface{}{"preset": preset.Name, "elapsed_ms": elapsed.Milliseconds(), "timeout_ms": modelUnloadTimeout.Milliseconds()})
+		})
 		slog.Info("vision matrix model unload acknowledged",
 			"preset", preset.Name,
 			"model", preset.Model,
@@ -520,6 +523,7 @@ func runVisionMatrix(run *matrixRun, presets []*VisionPreset, prompts []*VisionP
 			"preset":      preset.Name,
 			"status":      status,
 			"duration_ms": time.Since(unloadStarted).Milliseconds(),
+			"confirmed":   confirmed,
 		})
 	}
 
@@ -613,6 +617,15 @@ func runMatrixCell(tmpID string, preset *VisionPreset, prompt *VisionPrompt) *Ma
 // server to evict the model from memory. A successful response only confirms
 // that the runtime accepted the request.
 func tryUnloadModel(preset *VisionPreset) (int, error) {
+	// Lemonade exposes an explicit lifecycle endpoint. Fall back to the
+	// Ollama-compatible keep_alive request for other OpenAI-compatible servers.
+	if strings.Contains(strings.ToLower(preset.Endpoint), "lemonade") {
+		lemonadeBody, _ := json.Marshal(map[string]string{"model_name": preset.Model})
+		lemonadeURL := strings.TrimSuffix(preset.Endpoint, "/v1/chat/completions") + "/v1/unload"
+		if status, _, err := postUnload(lemonadeURL, lemonadeBody, preset.APIKey); status != http.StatusNotFound {
+			return status, err
+		}
+	}
 	body := map[string]interface{}{
 		"model":      preset.Model,
 		"messages":   []interface{}{},
@@ -622,23 +635,49 @@ func tryUnloadModel(preset *VisionPreset) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("marshal unload request: %w", err)
 	}
-	req, err := http.NewRequest("POST", preset.Endpoint, bytes.NewReader(b))
+	status, _, err := postUnload(preset.Endpoint, b, preset.APIKey)
+	return status, err
+}
+
+func postUnload(url string, body []byte, apiKey string) (int, bool, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		return 0, fmt.Errorf("create unload request: %w", err)
+		return 0, false, fmt.Errorf("create unload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if preset.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+preset.APIKey)
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := (&http.Client{Timeout: modelUnloadTimeout}).Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("send unload request: %w", err)
+		return 0, false, fmt.Errorf("send unload request: %w", err)
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return resp.StatusCode, fmt.Errorf("unload request returned HTTP %d", resp.StatusCode)
+		return resp.StatusCode, true, fmt.Errorf("unload request returned HTTP %d", resp.StatusCode)
 	}
-	return resp.StatusCode, nil
+	return resp.StatusCode, true, nil
+}
+
+func waitForModelUnload(preset *VisionPreset, timeout time.Duration, onWait func(time.Duration)) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		status := probeRuntime(&http.Request{}, preset)
+		if status.Provider == "generic" {
+			return false
+		}
+		for _, model := range status.Models {
+			if model.Name == preset.Model {
+				goto wait
+			}
+		}
+		return true
+	wait:
+		if time.Now().After(deadline) {
+			return false
+		}
+		onWait(time.Until(deadline))
+		time.Sleep(time.Second)
+	}
 }

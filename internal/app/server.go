@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 var version = "dev"
@@ -34,9 +35,11 @@ var (
 )
 
 var (
-	visionEnabled  bool
-	visionEndpoint string
-	visionModel    string
+	visionEnabled        bool
+	visionEndpoint       string
+	visionModel          string
+	visionRequestTimeout = 120 * time.Second
+	modelUnloadTimeout   = 120 * time.Second
 )
 
 // Run initializes Klipbord and starts its HTTP server.
@@ -46,6 +49,8 @@ func Run(appVersion string, staticAssets Assets) {
 	dataDir = envOr("DATA_DIR", defaultDataDir)
 	baseURL = envOr("BASE_URL", defaultBaseURL)
 	port := envOr("PORT", defaultPort)
+	visionRequestTimeout = durationEnv("VISION_REQUEST_TIMEOUT", 120*time.Second)
+	modelUnloadTimeout = durationEnv("VISION_UNLOAD_TIMEOUT", 120*time.Second)
 
 	maxUploadMB = defaultMaxUploadMB
 	if value := envOr("MAX_UPLOAD_MB", ""); value != "" {
@@ -128,4 +133,12 @@ func envOr(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func durationEnv(key string, fallback time.Duration) time.Duration {
+	value, err := time.ParseDuration(os.Getenv(key))
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }

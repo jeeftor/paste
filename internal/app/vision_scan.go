@@ -168,7 +168,7 @@ func callVisionAPIBytes(imgData []byte, preset *VisionPreset, promptText string)
 		req.Header.Set("Authorization", "Bearer "+preset.APIKey)
 	}
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: visionRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)

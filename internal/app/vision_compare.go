@@ -263,7 +263,7 @@ func analyzeWithPreset(itemID string, preset *VisionPreset, promptText string) P
 		req.Header.Set("Authorization", "Bearer "+preset.APIKey)
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: visionRequestTimeout}
 	resp, err := client.Do(req)
 	result.Latency = time.Since(start).Round(time.Millisecond).String()
 

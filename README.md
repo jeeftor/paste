@@ -60,6 +60,8 @@ Then open `http://localhost:8080` — drop a file, paste an image, share a snipp
 | `BASE_URL` | `http://localhost:8080` | Public URL for generating links |
 | `MAX_UPLOAD_MB` | `2048` | Max upload size in MB |
 | `VISION_ENABLED` | `true` | Enable automatic image analysis on upload |
+| `VISION_REQUEST_TIMEOUT` | `2m` | Maximum time for each matrix inference request |
+| `VISION_UNLOAD_TIMEOUT` | `2m` | Maximum time to wait for unload and observed memory release |
 | `VISION_ENDPOINT` | *(see presets)* | OpenAI-compatible vision LLM endpoint (overrides UI config) |
 | `VISION_MODEL` | *(see presets)* | Vision model name to use (overrides UI config) |
 
