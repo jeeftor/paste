@@ -1834,7 +1834,7 @@ function activateTab(tab) {
   document.querySelector(`.tab[data-tab="${tab}"]`)?.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'persistent') loadPersistentItems();
-  if (tab === 'config') { loadVisionConfig(); loadVisionPrompts(); }
+  if (tab === 'config') { loadVisionConfig(); loadVisionPrompts(); resumeMatrixIfRunning(); }
 }
 
 function switchTab(tab, event) {
@@ -3105,22 +3105,29 @@ function renderVisionCompareResultHTML(result) {
 // Live matrix state used across SSE event handlers.
 let _matrixMeta = null; // {presets, image_types, prompts, total_cells}
 let _matrixCounts = {};  // preset → {done, success}
+let _matrixActiveCells = {}; // preset → {cell: {image, prompt}}
+let _matrixSource = null;
 
-function testVisionMatrix() {
+function testVisionMatrix({ resume = false } = {}) {
+  if (_matrixSource) return;
   const btn = document.getElementById('testMatrixBtn');
   const resultDiv = document.getElementById('visionMatrixResult');
-  btn.textContent = 'Running matrix…';
+  btn.textContent = resume ? 'Reconnecting to matrix…' : 'Running matrix…';
   btn.disabled = true;
   resultDiv.style.display = 'block';
-  resultDiv.innerHTML = `<div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--bg-card);color:var(--text-muted);font-size:13px">Connecting…</div>`;
+  resultDiv.innerHTML = `<div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--bg-card);color:var(--text-muted);font-size:13px">${resume ? 'Reconnecting to the active matrix…' : 'Connecting…'}</div>`;
 
   _matrixMeta = null;
   _matrixCounts = {};
+  _matrixActiveCells = {};
 
   const es = new EventSource('/api/vision/test-matrix');
+  _matrixSource = es;
 
   es.addEventListener('start', e => {
     _matrixMeta = JSON.parse(e.data);
+    _matrixCounts = {};
+    _matrixActiveCells = {};
     resultDiv.innerHTML = buildMatrixSkeleton(_matrixMeta);
     updateMatrixHeader(0, _matrixMeta.total_cells);
   });
@@ -3128,6 +3135,7 @@ function testVisionMatrix() {
   es.addEventListener('preset_start', e => {
     const d = JSON.parse(e.data);
     _matrixCounts[d.preset] = { done: 0, success: 0, total: (_matrixMeta?.image_types?.length || 5) * (_matrixMeta?.prompts?.length || 6) };
+    _matrixActiveCells[d.preset] = {};
     setPresetStatus(d.preset, `⟳ Loading ${escapeHtml(d.model)}…`, '#f0a500');
   });
 
@@ -3138,12 +3146,20 @@ function testVisionMatrix() {
 
   es.addEventListener('model_ready', e => {
     const d = JSON.parse(e.data);
-    setPresetStatus(d.preset, `✓ Model ready — running cells…`, 'var(--success)');
+    setPresetStatus(d.preset, `✓ Model ready in ${formatDuration(d.duration_ms)} — running tests…`, 'var(--success)');
   });
 
   es.addEventListener('preset_failed', e => {
     const d = JSON.parse(e.data);
     setPresetStatus(d.preset, `✗ ${escapeHtml(d.message)}`, '#f87171');
+  });
+
+  es.addEventListener('cell_start', e => {
+    const d = JSON.parse(e.data);
+    if (_matrixActiveCells[d.preset]) {
+      _matrixActiveCells[d.preset][d.cell] = { image: d.image, prompt: d.prompt };
+      setPresetStatus(d.preset, matrixRunningStatus(d.preset), 'var(--accent)');
+    }
   });
 
   es.addEventListener('cell_complete', e => {
@@ -3162,10 +3178,10 @@ function testVisionMatrix() {
     }
     // Update counts.
     if (_matrixCounts[d.preset]) {
+      delete _matrixActiveCells[d.preset][d.cell];
       _matrixCounts[d.preset].done++;
       if (d.success) _matrixCounts[d.preset].success++;
-      const c = _matrixCounts[d.preset];
-      setPresetStatus(d.preset, `Running… ${c.done}/${c.total} cells (${c.success} passed)`, 'var(--accent)');
+      setPresetStatus(d.preset, matrixRunningStatus(d.preset, d), 'var(--accent)');
     }
     // Update global header.
     const totalDone = Object.values(_matrixCounts).reduce((s, c) => s + c.done, 0);
@@ -3180,14 +3196,32 @@ function testVisionMatrix() {
     setPresetStatus(d.preset, `${d.successes}/${d.total} passed`, color);
   });
 
+  es.addEventListener('model_unloading', e => {
+    const d = JSON.parse(e.data);
+    setPresetStatus(d.preset, 'Unloading model…', '#f0a500');
+  });
+
+  es.addEventListener('model_unloaded', e => {
+    const d = JSON.parse(e.data);
+    setPresetStatus(d.preset, `Unload request acknowledged (${d.status})`, 'var(--success)');
+  });
+
+  es.addEventListener('model_unload_failed', e => {
+    const d = JSON.parse(e.data);
+    setPresetStatus(d.preset, `Unload request failed: ${escapeHtml(d.message)}`, '#f0a500');
+  });
+
   es.addEventListener('done', e => {
     const d = JSON.parse(e.data);
     const pct = d.total_cells > 0 ? Math.round(d.successes / d.total_cells * 100) : 0;
     updateMatrixHeader(d.successes, d.total_cells);
     const hdr = document.getElementById('matrixMainHeader');
     if (hdr) hdr.textContent = `Matrix complete — ${d.successes}/${d.total_cells} cells passed (${pct}%)`;
+    const benchmark = document.getElementById('matrixBenchmark');
+    if (benchmark) benchmark.innerHTML = renderMatrixBenchmark(d.results || []);
     btn.textContent = 'Test All Models ★';
     btn.disabled = false;
+    _matrixSource = null;
     es.close();
   });
 
@@ -3198,6 +3232,7 @@ function testVisionMatrix() {
     } catch (_) {}
     btn.textContent = 'Test All Models ★';
     btn.disabled = false;
+    _matrixSource = null;
     es.close();
   });
 
@@ -3205,8 +3240,18 @@ function testVisionMatrix() {
     if (es.readyState === EventSource.CLOSED) {
       btn.textContent = 'Test All Models ★';
       btn.disabled = false;
+      _matrixSource = null;
     }
   };
+}
+
+async function resumeMatrixIfRunning() {
+  if (_matrixSource) return;
+  try {
+    const resp = await fetch('/api/vision/test-matrix/status');
+    const status = await resp.json();
+    if (status.running) testVisionMatrix({ resume: true });
+  } catch (_) {}
 }
 
 function matrixCellId(preset, image, prompt) {
@@ -3220,6 +3265,7 @@ function buildMatrixSkeleton(meta) {
   html += `<div id="matrixMainHeader" style="font-weight:600;font-size:14px">Matrix running…</div>`;
   html += `<div id="matrixGlobalCount" style="font-size:12px;color:var(--text-muted)">0/${total_cells}</div>`;
   html += `</div>`;
+  html += `<div id="matrixBenchmark"></div>`;
 
   for (const preset of presets) {
     html += `<div style="margin-bottom:16px">`;
@@ -3260,6 +3306,62 @@ function updateMatrixHeader(successes, total, done) {
       ? `${done} run · ${successes} passed / ${total} total`
       : `${successes}/${total} (${pct}%)`;
   }
+}
+
+function matrixRunningStatus(preset, lastResult) {
+  const counts = _matrixCounts[preset];
+  if (!counts) return 'Running…';
+  const active = Object.values(_matrixActiveCells[preset] || {});
+  const activeText = active.length
+    ? ` · ${active.length} active: ${active.map(cell => `${cell.image} × ${cell.prompt}`).join(', ')}`
+    : '';
+  const lastText = lastResult
+    ? `Last ${lastResult.image} × ${lastResult.prompt} ${lastResult.success ? 'passed' : 'failed'} in ${formatDuration(lastResult.duration_ms)} · `
+    : '';
+  return `${lastText}${counts.done}/${counts.total} complete (${counts.success} passed)${activeText}`;
+}
+
+function renderMatrixBenchmark(results) {
+  const benchmarks = results.map(result => {
+    const durations = [];
+    for (const image of Object.values(result.cells || {})) {
+      for (const cell of Object.values(image || {})) {
+        if (cell.success && Number.isFinite(cell.duration_ms)) durations.push(cell.duration_ms);
+      }
+    }
+    durations.sort((a, b) => a - b);
+    const average = durations.length ? durations.reduce((sum, value) => sum + value, 0) / durations.length : 0;
+    return {
+      preset: result.preset,
+      model: result.model,
+      successes: result.successes,
+      total: result.total_runs,
+      average,
+      median: matrixPercentile(durations, 0.5),
+      p95: matrixPercentile(durations, 0.95),
+    };
+  });
+  const maxAverage = Math.max(...benchmarks.map(benchmark => benchmark.average), 1);
+  let html = `<div style="margin:0 0 16px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">`;
+  html += `<div style="font-weight:600;font-size:13px;margin-bottom:3px">Speed benchmark</div>`;
+  html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Successful cells only · lower latency is better · p95 highlights slow outliers</div>`;
+  for (const benchmark of benchmarks) {
+    const successRate = benchmark.total ? Math.round(benchmark.successes / benchmark.total * 100) : 0;
+    const width = benchmark.average ? Math.max(4, benchmark.average / maxAverage * 100) : 0;
+    const latency = benchmark.average ? `avg ${formatDuration(benchmark.average)} · p50 ${formatDuration(benchmark.median)} · p95 ${formatDuration(benchmark.p95)}` : 'No successful cells';
+    html += `<div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(110px,2fr) auto;gap:10px;align-items:center;margin:8px 0">`;
+    html += `<div style="min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(benchmark.preset)}</div><div style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(benchmark.model)}</div></div>`;
+    html += `<div><div style="height:7px;border-radius:4px;background:var(--bg-card);overflow:hidden"><div style="height:100%;width:${width}%;background:${successRate === 100 ? 'var(--success)' : successRate ? '#f0a500' : '#f87171'}"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:3px">${latency}</div></div>`;
+    html += `<div style="font-size:11px;color:${successRate === 100 ? 'var(--success)' : successRate ? '#f0a500' : '#f87171'}">${benchmark.successes}/${benchmark.total} passed</div>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function matrixPercentile(sortedValues, percentile) {
+  if (!sortedValues.length) return 0;
+  return sortedValues[Math.min(sortedValues.length - 1, Math.ceil(sortedValues.length * percentile) - 1)];
 }
 
 async function compareVisionPresets() {
