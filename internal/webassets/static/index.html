@@ -467,54 +467,45 @@ body {
   color: var(--text-muted);
   margin-top: 4px;
 }
-/* Vision analysis section on item cards */
-.item-analysis {
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-}
-.item-analysis-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+/* Vision analysis stays compact on cards; full output opens in the modal. */
+.analysis-summary {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
 }
-.item-analysis-label svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-.item-analysis-text {
+.analysis-summary:hover { background: var(--bg-hover); color: var(--text); }
+.analysis-summary svg { width: 14px; height: 14px; flex-shrink: 0; }
+.analysis-summary-status { color: var(--text); font-weight: 600; }
+.analysis-summary-meta { margin-left: auto; font-size: 11px; }
+.analysis-summary-pending .analysis-summary-status { color: var(--accent); }
+.analysis-summary-failed .analysis-summary-status { color: var(--danger); }
+.analysis-detail { display: grid; gap: 16px; }
+.analysis-detail-entry { display: grid; gap: 8px; }
+.analysis-detail-heading { display: flex; align-items: center; gap: 8px; }
+.analysis-detail-heading strong { font-size: 13px; }
+.analysis-detail-meta { color: var(--text-muted); font-size: 11px; }
+.analysis-detail-description { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.analysis-detail-output {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--bg);
   color: var(--text);
+  font: 12px/1.5 var(--mono);
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 120px;
-  overflow-y: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.4;
-  background: var(--bg);
-  padding: 6px 8px;
-  border-radius: 4px;
-  margin-top: 4px;
 }
-.item-analysis-pending {
-  color: var(--text-muted);
-  font-style: italic;
-}
-.item-analysis-error {
-  color: var(--danger);
-}
-.item-analysis-desc {
-  color: var(--text-muted);
-  font-size: 11px;
-  margin-top: 4px;
-  font-style: italic;
-}
+.analysis-detail-error { margin: 0; color: var(--danger); font-size: 13px; }
 .items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -2436,6 +2427,54 @@ function viewText(id) {
     });
 }
 
+function viewAnalysis(id) {
+  const item = allClipboardItems.find(entry => entry.id === id)
+    || allPersistentItems.find(entry => entry.id === id);
+  if (!item || !item.analyses) {
+    showToast('Analysis is no longer available', true);
+    return;
+  }
+
+  const entries = Object.entries(item.analyses).sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) {
+    showToast('Analysis is no longer available', true);
+    return;
+  }
+
+  const content = entries.map(([promptName, analysis]) => {
+    const details = [
+      `Prompt: ${promptName}`,
+      `Status: ${analysis.status || 'unknown'}`,
+      analysis.backend ? `Model: ${analysis.backend}` : '',
+      analysis.duration_ms ? `Duration: ${formatDuration(analysis.duration_ms)}` : '',
+      analysis.description ? `\nDescription:\n${analysis.description}` : '',
+      analysis.text ? `\nExtracted text:\n${analysis.text}` : '',
+      analysis.error ? `\nError:\n${analysis.error}` : '',
+    ].filter(Boolean);
+    return details.join('\n');
+  }).join('\n\n---\n\n');
+
+  window._currentItem = { id, type: 'analysis', content };
+  currentModalId = id;
+  document.getElementById('modalTitle').textContent = `Analysis · ${item.name}`;
+  document.getElementById('modalCopyContentBtn').style.display = 'inline-flex';
+  document.getElementById('modalBody').innerHTML = `<div class="analysis-detail">${entries.map(([promptName, analysis]) => {
+    const metadata = [analysis.backend, analysis.duration_ms ? formatDuration(analysis.duration_ms) : ''].filter(Boolean).join(' · ');
+    const description = analysis.description
+      ? `<p class="analysis-detail-description">${escapeHtml(analysis.description)}</p>` : '';
+    const text = analysis.text
+      ? `<pre class="analysis-detail-output">${escapeHtml(analysis.text)}</pre>` : '';
+    const error = analysis.error
+      ? `<p class="analysis-detail-error">${escapeHtml(analysis.error)}</p>` : '';
+    return `<section class="analysis-detail-entry">
+      <div class="analysis-detail-heading"><strong>${escapeHtml(promptName)}</strong><span class="badge">${escapeHtml(analysis.status || 'unknown')}</span></div>
+      ${metadata ? `<div class="analysis-detail-meta">${escapeHtml(metadata)}</div>` : ''}
+      ${description}${text}${error}
+    </section>`;
+  }).join('')}</div>`;
+  document.getElementById('modal').classList.add('show');
+}
+
 function openImageLightbox(src) {
   const lb = document.getElementById('imgLightbox');
   const img = document.getElementById('imgLightboxImg');
@@ -3431,7 +3470,7 @@ async function deletePrompt(name) {
 
 function copyModalContent() {
   const item = window._currentItem;
-  if (!item || item.type !== 'text') return;
+  if (!item || !item.content) return;
   navigator.clipboard.writeText(item.content).then(() => {
     showToast(`Copied content (${item.content.length} chars)`);
   }).catch(() => showToast('Clipboard write failed', true));
@@ -3666,29 +3705,29 @@ function renderItemCard(item, isPersistent) {
     `;
   }
 
-  // Vision analysis section (for images)
+  // Vision output should not turn the grid into a diagnostic console.
   let analysisHTML = '';
   if (item.type === 'file' && item.mime_type && item.mime_type.startsWith('image/')) {
     const analyses = item.analyses || {};
-    const promptNames = Object.keys(analyses);
-    const hasPending = promptNames.some(n => analyses[n].status === 'pending');
-
-    if (promptNames.length > 0) {
-      analysisHTML = `<div class="item-analysis">`;
-      for (const pn of promptNames.sort()) {
-        const a = analyses[pn];
-        const durBadge = a.duration_ms ? `<span class="badge" title="Time to analyze">${formatDuration(a.duration_ms)}</span>` : '';
-        if (a.status === 'pending') {
-          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] Analyzing...</div><div class="item-analysis-pending">Vision model processing image...</div>`;
-        } else if (a.status === 'complete') {
-          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] <span class="badge">${a.backend || ''}</span>${durBadge}</div>`;
-          if (a.description) analysisHTML += `<div class="item-analysis-desc">${escapeHtml(a.description)}</div>`;
-          if (a.text) analysisHTML += `<div class="item-analysis-text">${escapeHtml(a.text)}</div>`;
-        } else if (a.status === 'failed') {
-          analysisHTML += `<div class="item-analysis-label">${ICONS.scan} [${pn}] Failed${durBadge}</div><div class="item-analysis-error">${escapeHtml(a.error || 'Unknown error')}</div>`;
-        }
+    const results = Object.values(analyses);
+    const complete = results.filter(analysis => analysis.status === 'complete');
+    const pending = results.filter(analysis => analysis.status === 'pending');
+    const failed = results.filter(analysis => analysis.status === 'failed');
+    const totalDuration = complete.reduce((sum, analysis) => sum + (analysis.duration_ms || 0), 0);
+    if (results.length > 0) {
+      let state = `${complete.length} analysis${complete.length === 1 ? '' : 'es'} ready`;
+      let stateClass = '';
+      if (pending.length > 0) {
+        state = `${pending.length} analysis${pending.length === 1 ? '' : 'es'} running`;
+        stateClass = ' analysis-summary-pending';
+      } else if (complete.length === 0 && failed.length > 0) {
+        state = 'Analysis failed';
+        stateClass = ' analysis-summary-failed';
       }
-      analysisHTML += `</div>`;
+      const meta = totalDuration ? formatDuration(totalDuration) : `${results.length} result${results.length === 1 ? '' : 's'}`;
+      analysisHTML = `<button type="button" class="analysis-summary${stateClass}" onclick="viewAnalysis('${item.id}')">
+        ${ICONS.scan}<span class="analysis-summary-status">${state}</span><span class="analysis-summary-meta">${meta}</span>
+      </button>`;
     }
   }
 
@@ -3897,7 +3936,7 @@ setInterval(() => {
 
 // Fast refresh (5s) when there are pending vision analyses
 setInterval(() => {
-  const pending = document.querySelectorAll('.item-analysis-pending');
+  const pending = document.querySelectorAll('.analysis-summary-pending');
   if (pending.length > 0) {
     loadItems();
     if (document.getElementById('tab-persistent').classList.contains('active')) {
