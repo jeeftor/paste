@@ -68,6 +68,14 @@ func setupVisionTestServer(t *testing.T, mockResponse string) (*httptest.Server,
 	prompts = make(map[string]*VisionPrompt)
 	initPrompts()
 
+	// Set up vision config
+	visionConfigFile = filepath.Join(dir, visionConfigFileName)
+	os.Unsetenv("VISION_ENDPOINT")
+	os.Unsetenv("VISION_MODEL")
+	os.Unsetenv("VISION_ENABLED")
+	visionConfig = VisionConfigFile{}
+	initVisionConfig()
+
 	// Set up vision with mock server
 	mockServer := mockVisionServer(t, mockResponse)
 	visionEndpoint = mockServer.URL + "/v1/chat/completions"
@@ -81,6 +89,8 @@ func setupVisionTestServer(t *testing.T, mockResponse string) (*httptest.Server,
 	mux.HandleFunc("/api/analyze/", apiAnalyzeHandler)
 	mux.HandleFunc("/api/prompts", apiPromptsHandler)
 	mux.HandleFunc("/api/prompts/", apiPromptHandler)
+	mux.HandleFunc("/api/config/vision", apiVisionConfigHandler)
+	mux.HandleFunc("/api/config/vision/", apiVisionConfigHandler)
 	mux.HandleFunc("/api/text", apiTextHandler)
 	mux.HandleFunc("/api/text/", apiTextItemHandler)
 	mux.HandleFunc("/api/upload", apiUploadHandler)
@@ -500,7 +510,7 @@ func TestMCPToolsList(t *testing.T) {
 		tm := tool.(map[string]interface{})
 		toolNames[tm["name"].(string)] = true
 	}
-	expected := []string{"list_files", "get_file", "upload_file", "create_text", "delete_file", "persist_file", "describe_image", "analyze_image", "list_prompts"}
+	expected := []string{"list_files", "get_file", "upload_file", "create_text", "delete_file", "persist_file", "describe_image", "analyze_image", "list_prompts", "create_prompt", "update_prompt", "delete_prompt", "list_vision_presets", "set_vision_preset", "test_vision_preset"}
 	for _, name := range expected {
 		if !toolNames[name] {
 			t.Errorf("tool %q not found in tools/list", name)
@@ -641,5 +651,303 @@ func TestMCPDescribeImageNotFound(t *testing.T) {
 	}
 	if !strings.Contains(errObj["message"].(string), "not found") {
 		t.Errorf("error message doesn't contain 'not found'")
+	}
+}
+
+// --- MCP prompt CRUD tests ---
+
+func mcpCall(t *testing.T, server *httptest.Server, toolName string, args map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	params := map[string]interface{}{"name": toolName, "arguments": args}
+	reqBody, _ := json.Marshal(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params})
+	resp, err := http.Post(server.URL+"/mcp", "application/json", strings.NewReader(string(reqBody)))
+	if err != nil {
+		t.Fatalf("MCP call failed: %v", err)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	return result
+}
+
+func TestMCPCreatePrompt(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "create_prompt", map[string]interface{}{
+		"name":        "mcp_test_prompt",
+		"description": "Created via MCP",
+		"prompt":      "Analyze this image and return JSON.",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("create_prompt returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "mcp_test_prompt") {
+		t.Errorf("response doesn't contain prompt name: %s", text)
+	}
+
+	// Verify it exists
+	p, ok := getPrompt("mcp_test_prompt")
+	if !ok {
+		t.Fatal("created prompt not found")
+	}
+	if p.Description != "Created via MCP" {
+		t.Errorf("description = %q", p.Description)
+	}
+}
+
+func TestMCPCreatePromptDuplicate(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "create_prompt", map[string]interface{}{
+		"name":   "default",
+		"prompt": "test",
+	})
+
+	errObj, hasErr := result["error"].(map[string]interface{})
+	if !hasErr {
+		t.Fatal("expected error for duplicate prompt")
+	}
+	if !strings.Contains(errObj["message"].(string), "already exists") {
+		t.Errorf("error message: %v", errObj["message"])
+	}
+}
+
+func TestMCPUpdatePrompt(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "update_prompt", map[string]interface{}{
+		"name":        "default",
+		"description": "Updated via MCP",
+		"prompt":      "New prompt text",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("update_prompt returned error: %v", result["error"])
+	}
+
+	p, _ := getPrompt("default")
+	if p.Description != "Updated via MCP" {
+		t.Errorf("description = %q", p.Description)
+	}
+	if p.Prompt != "New prompt text" {
+		t.Errorf("prompt not updated")
+	}
+}
+
+func TestMCPUpdatePromptNotFound(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "update_prompt", map[string]interface{}{
+		"name": "nonexistent",
+	})
+
+	errObj, hasErr := result["error"].(map[string]interface{})
+	if !hasErr {
+		t.Fatal("expected error for non-existent prompt")
+	}
+	if !strings.Contains(errObj["message"].(string), "not found") {
+		t.Errorf("error message: %v", errObj["message"])
+	}
+}
+
+func TestMCPDeletePrompt(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	// Create a custom prompt first
+	mcpCall(t, server, "create_prompt", map[string]interface{}{
+		"name":   "to_delete",
+		"prompt": "test",
+	})
+
+	// Delete it
+	result := mcpCall(t, server, "delete_prompt", map[string]interface{}{
+		"name": "to_delete",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("delete_prompt returned error: %v", result["error"])
+	}
+
+	// Verify it's gone
+	if _, ok := getPrompt("to_delete"); ok {
+		t.Error("prompt still exists after delete")
+	}
+}
+
+func TestMCPDeletePromptBuiltinFails(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "delete_prompt", map[string]interface{}{
+		"name": "default",
+	})
+
+	errObj, hasErr := result["error"].(map[string]interface{})
+	if !hasErr {
+		t.Fatal("expected error for deleting built-in prompt")
+	}
+	if !strings.Contains(errObj["message"].(string), "built-in") {
+		t.Errorf("error message: %v", errObj["message"])
+	}
+}
+
+// --- MCP vision preset tests ---
+
+func TestMCPListVisionPresets(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "list_vision_presets", map[string]interface{}{})
+
+	if result["error"] != nil {
+		t.Fatalf("list_vision_presets returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "lemonade") {
+		t.Errorf("text doesn't contain 'lemonade': %s", text)
+	}
+	if !strings.Contains(text, "Active preset:") {
+		t.Errorf("text doesn't show active preset: %s", text)
+	}
+}
+
+func TestMCPSetVisionPreset(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "set_vision_preset", map[string]interface{}{
+		"preset": "ollama",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("set_vision_preset returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "ollama") {
+		t.Errorf("text doesn't contain 'ollama': %s", text)
+	}
+
+	if visionConfig.ActivePreset != "ollama" {
+		t.Errorf("active preset = %q, expected 'ollama'", visionConfig.ActivePreset)
+	}
+}
+
+func TestMCPSetVisionPresetNotFound(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "set_vision_preset", map[string]interface{}{
+		"preset": "nonexistent",
+	})
+
+	errObj, hasErr := result["error"].(map[string]interface{})
+	if !hasErr {
+		t.Fatal("expected error for non-existent preset")
+	}
+	if !strings.Contains(errObj["message"].(string), "not found") {
+		t.Errorf("error message: %v", errObj["message"])
+	}
+}
+
+func TestMCPTestVisionPreset(t *testing.T) {
+	// Use a mock LLM that responds to the test request (no image needed)
+	dir := setupTestDir(t)
+	baseURL = "http://test.local"
+	promptsFile = filepath.Join(dir, promptsFileName)
+	prompts = make(map[string]*VisionPrompt)
+	initPrompts()
+	visionConfigFile = filepath.Join(dir, visionConfigFileName)
+	os.Unsetenv("VISION_ENDPOINT")
+	os.Unsetenv("VISION_MODEL")
+	os.Unsetenv("VISION_ENABLED")
+	visionConfig = VisionConfigFile{}
+	initVisionConfig()
+
+	// Mock LLM for the test request (text-only, no image)
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	t.Cleanup(mockLLM.Close)
+
+	// Update the lemonade preset to point at our mock
+	updateVisionPreset("lemonade", mockLLM.URL+"/v1/chat/completions", "test-model", "", "")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", mcpHandler)
+	server := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		server.Close()
+		teardownTestDir(t, dir)
+	})
+
+	result := mcpCall(t, server, "test_vision_preset", map[string]interface{}{
+		"preset": "lemonade",
+	})
+
+	if result["error"] != nil {
+		t.Fatalf("test_vision_preset returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "OK") {
+		t.Errorf("text doesn't contain 'OK': %s", text)
+	}
+	if !strings.Contains(text, "Latency:") {
+		t.Errorf("text doesn't contain latency: %s", text)
+	}
+}
+
+func TestMCPTestVisionPresetActive(t *testing.T) {
+	dir := setupTestDir(t)
+	baseURL = "http://test.local"
+	promptsFile = filepath.Join(dir, promptsFileName)
+	prompts = make(map[string]*VisionPrompt)
+	initPrompts()
+	visionConfigFile = filepath.Join(dir, visionConfigFileName)
+	os.Unsetenv("VISION_ENDPOINT")
+	os.Unsetenv("VISION_MODEL")
+	os.Unsetenv("VISION_ENABLED")
+	visionConfig = VisionConfigFile{}
+	initVisionConfig()
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	t.Cleanup(mockLLM.Close)
+
+	updateVisionPreset("lemonade", mockLLM.URL+"/v1/chat/completions", "test-model", "", "")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", mcpHandler)
+	server := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		server.Close()
+		teardownTestDir(t, dir)
+	})
+
+	// No preset specified — should test the active one (lemonade)
+	result := mcpCall(t, server, "test_vision_preset", map[string]interface{}{})
+
+	if result["error"] != nil {
+		t.Fatalf("test_vision_preset returned error: %v", result["error"])
+	}
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "OK") {
+		t.Errorf("text doesn't contain 'OK': %s", text)
+	}
+}
+
+func TestMCPTestVisionPresetNotFound(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"test","text":"test","description":"test"}`)
+
+	result := mcpCall(t, server, "test_vision_preset", map[string]interface{}{
+		"preset": "nonexistent",
+	})
+
+	errObj, hasErr := result["error"].(map[string]interface{})
+	if !hasErr {
+		t.Fatal("expected error for non-existent preset")
+	}
+	if !strings.Contains(errObj["message"].(string), "not found") {
+		t.Errorf("error message: %v", errObj["message"])
 	}
 }

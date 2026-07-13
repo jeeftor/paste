@@ -16,7 +16,7 @@ Self-hosted paste/file-drop service with web UI, REST API, MCP server, and AI vi
 - **Files on disk** — plain files, directly readable by agents with filesystem access
 - **Unique IDs** — short 6-character IDs for every item
 - **Single Go binary** — no runtime dependencies
-- **Tested** — 69 tests with 50.3% code coverage
+- **Tested** — 81 tests with 52.7% code coverage
 
 ## Quick Start
 
@@ -244,6 +244,12 @@ MCP endpoint: `https://paste.example.com/mcp`
 | `describe_image` | Get vision analysis for an image (optional `prompt` parameter) |
 | `analyze_image` | Trigger/re-trigger vision analysis (optional `prompt` parameter) |
 | `list_prompts` | List all available vision prompts (built-in + custom) |
+| `create_prompt` | Create a new vision prompt template |
+| `update_prompt` | Update an existing prompt (built-in or custom) |
+| `delete_prompt` | Delete a custom prompt (built-ins cannot be deleted) |
+| `list_vision_presets` | List all configured vision LLM presets with active selection |
+| `set_vision_preset` | Switch the active vision LLM preset |
+| `test_vision_preset` | Test connectivity to a preset (omit preset to test active) |
 
 ### Vision MCP Tool Examples
 
@@ -259,6 +265,27 @@ MCP endpoint: `https://paste.example.com/mcp`
 
 // List all available prompts
 {"name": "list_prompts", "arguments": {}}
+
+// Create a custom prompt
+{"name": "create_prompt", "arguments": {"name": "receipts", "description": "Receipt OCR", "prompt": "Extract all items and totals..."}}
+
+// Update a prompt
+{"name": "update_prompt", "arguments": {"name": "default", "prompt": "New prompt text..."}}
+
+// Delete a custom prompt
+{"name": "delete_prompt", "arguments": {"name": "receipts"}}
+
+// List vision LLM presets
+{"name": "list_vision_presets", "arguments": {}}
+
+// Switch active preset
+{"name": "set_vision_preset", "arguments": {"preset": "ollama"}}
+
+// Test a preset's connection
+{"name": "test_vision_preset", "arguments": {"preset": "lemonade"}}
+
+// Test the active preset
+{"name": "test_vision_preset", "arguments": {}}
 ```
 
 ## Direct Access

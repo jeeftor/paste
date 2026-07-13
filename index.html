@@ -1440,6 +1440,42 @@ body {
       <div class="mcp-tool-desc">List all available vision prompt templates (built-in and custom).</div>
       <div class="mcp-tool-params">Parameters: none</div>
     </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">create_prompt</div>
+      <div class="mcp-tool-desc">Create a new vision prompt template.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">name</span> (<span class="param-type">string</span>, required), <span class="param-name">prompt</span> (<span class="param-type">string</span>, required), <span class="param-name">description</span> (<span class="param-type">string</span>, optional)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">update_prompt</div>
+      <div class="mcp-tool-desc">Update an existing vision prompt template (built-in or custom).</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">name</span> (<span class="param-type">string</span>, required), <span class="param-name">prompt</span> (<span class="param-type">string</span>, optional), <span class="param-name">description</span> (<span class="param-type">string</span>, optional)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">delete_prompt</div>
+      <div class="mcp-tool-desc">Delete a custom vision prompt template. Built-in prompts cannot be deleted.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">name</span> (<span class="param-type">string</span>, required)</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">list_vision_presets</div>
+      <div class="mcp-tool-desc">List all configured vision LLM presets with endpoints, models, and active selection.</div>
+      <div class="mcp-tool-params">Parameters: none</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">set_vision_preset</div>
+      <div class="mcp-tool-desc">Switch the active vision LLM preset. Fails if env vars are overriding config.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">preset</span> (<span class="param-type">string</span>, required) — name of the preset to activate</div>
+    </div>
+
+    <div class="mcp-tool-card">
+      <div class="mcp-tool-name">test_vision_preset</div>
+      <div class="mcp-tool-desc">Test connectivity to a vision LLM preset by sending a minimal chat request. Returns success, message, and latency.</div>
+      <div class="mcp-tool-params">Parameters: <span class="param-name">preset</span> (<span class="param-type">string</span>, optional) — name of the preset to test (omit to test the active preset)</div>
+    </div>
   </div>
 </div>
 

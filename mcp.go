@@ -235,6 +235,99 @@ var mcpTools = []MCPTool{
 			"properties": map[string]any{},
 		},
 	},
+	{
+		Name:        "create_prompt",
+		Description: "Create a new vision prompt template. The prompt text instructs the vision model how to analyze images.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Unique name for the prompt",
+				},
+				"description": map[string]any{
+					"type":        "string",
+					"description": "Short description of what the prompt does",
+				},
+				"prompt": map[string]any{
+					"type":        "string",
+					"description": "The prompt text sent to the vision model",
+				},
+			},
+			"required": []string{"name", "prompt"},
+		},
+	},
+	{
+		Name:        "update_prompt",
+		Description: "Update an existing vision prompt template (built-in or custom).",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Name of the prompt to update",
+				},
+				"description": map[string]any{
+					"type":        "string",
+					"description": "New description (optional)",
+				},
+				"prompt": map[string]any{
+					"type":        "string",
+					"description": "New prompt text (optional)",
+				},
+			},
+			"required": []string{"name"},
+		},
+	},
+	{
+		Name:        "delete_prompt",
+		Description: "Delete a custom vision prompt template. Built-in prompts cannot be deleted.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Name of the prompt to delete",
+				},
+			},
+			"required": []string{"name"},
+		},
+	},
+	{
+		Name:        "list_vision_presets",
+		Description: "List all configured vision LLM presets (endpoints, models, active selection).",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	},
+	{
+		Name:        "set_vision_preset",
+		Description: "Switch the active vision LLM preset. Fails if env vars are overriding config.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"preset": map[string]any{
+					"type":        "string",
+					"description": "Name of the preset to activate",
+				},
+			},
+			"required": []string{"preset"},
+		},
+	},
+	{
+		Name:        "test_vision_preset",
+		Description: "Test connectivity to a vision LLM preset by sending a minimal chat request. Returns success, message, and latency.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"preset": map[string]any{
+					"type":        "string",
+					"description": "Name of the preset to test (omit to test the active preset)",
+				},
+			},
+		},
+	},
 }
 
 func mcpHandler(w http.ResponseWriter, r *http.Request) {
@@ -398,6 +491,45 @@ func handleMCPToolCall(name string, args map[string]any) (interface{}, *MCPError
 
 	case "list_prompts":
 		return mcpListPrompts()
+
+	case "create_prompt":
+		name, _ := args["name"].(string)
+		desc, _ := args["description"].(string)
+		promptText, _ := args["prompt"].(string)
+		if name == "" || promptText == "" {
+			return nil, &MCPError{Code: -32602, Message: "name and prompt are required"}
+		}
+		return mcpCreatePrompt(name, desc, promptText)
+
+	case "update_prompt":
+		name, _ := args["name"].(string)
+		if name == "" {
+			return nil, &MCPError{Code: -32602, Message: "name is required"}
+		}
+		desc, _ := args["description"].(string)
+		promptText, _ := args["prompt"].(string)
+		return mcpUpdatePrompt(name, desc, promptText)
+
+	case "delete_prompt":
+		name, _ := args["name"].(string)
+		if name == "" {
+			return nil, &MCPError{Code: -32602, Message: "name is required"}
+		}
+		return mcpDeletePrompt(name)
+
+	case "list_vision_presets":
+		return mcpListVisionPresets()
+
+	case "set_vision_preset":
+		preset, _ := args["preset"].(string)
+		if preset == "" {
+			return nil, &MCPError{Code: -32602, Message: "preset is required"}
+		}
+		return mcpSetVisionPreset(preset)
+
+	case "test_vision_preset":
+		preset, _ := args["preset"].(string)
+		return mcpTestVisionPreset(preset)
 
 	default:
 		return nil, &MCPError{Code: -32601, Message: "Unknown tool: " + name}
@@ -782,4 +914,127 @@ func writeMCPError(w http.ResponseWriter, id interface{}, code int, msg string) 
 		ID:      id,
 		Error:   &MCPError{Code: code, Message: msg},
 	})
+}
+
+// --- Vision prompt MCP tools ---
+
+func mcpCreatePrompt(name, description, promptText string) (interface{}, *MCPError) {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	if _, exists := prompts[name]; exists {
+		return nil, &MCPError{Code: -32602, Message: "prompt already exists"}
+	}
+	p := &VisionPrompt{
+		Name:        name,
+		Description: description,
+		Prompt:      promptText,
+		BuiltIn:     false,
+	}
+	prompts[name] = p
+	savePrompts()
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("Created prompt %q", name)}},
+	}, nil
+}
+
+func mcpUpdatePrompt(name, description, promptText string) (interface{}, *MCPError) {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	p, ok := prompts[name]
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "prompt not found"}
+	}
+	if description != "" {
+		p.Description = description
+	}
+	if promptText != "" {
+		p.Prompt = promptText
+	}
+	savePrompts()
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("Updated prompt %q", name)}},
+	}, nil
+}
+
+func mcpDeletePrompt(name string) (interface{}, *MCPError) {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	p, ok := prompts[name]
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "prompt not found"}
+	}
+	if p.BuiltIn {
+		return nil, &MCPError{Code: -32602, Message: "cannot delete built-in prompt"}
+	}
+	delete(prompts, name)
+	savePrompts()
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("Deleted prompt %q", name)}},
+	}, nil
+}
+
+// --- Vision preset MCP tools ---
+
+func mcpListVisionPresets() (interface{}, *MCPError) {
+	presets := listVisionPresets()
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Vision enabled: %v", visionEnabled))
+	lines = append(lines, fmt.Sprintf("Active preset: %s", visionConfig.ActivePreset))
+	if visionEnvOverridden {
+		lines = append(lines, "Note: env vars (VISION_ENDPOINT/VISION_MODEL) are overriding UI config")
+	}
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("Presets (%d):", len(presets)))
+	for _, p := range presets {
+		active := ""
+		if p.Name == visionConfig.ActivePreset {
+			active = " *"
+		}
+		desc := ""
+		if p.Description != "" {
+			desc = fmt.Sprintf(" — %s", p.Description)
+		}
+		lines = append(lines, fmt.Sprintf("  %s%s: %s @ %s%s", p.Name, active, p.Model, p.Endpoint, desc))
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
+}
+
+func mcpSetVisionPreset(preset string) (interface{}, *MCPError) {
+	if visionEnvOverridden {
+		return nil, &MCPError{Code: -32603, Message: "cannot change active preset — env vars are overriding config"}
+	}
+	if !setActiveVisionPreset(preset) {
+		return nil, &MCPError{Code: -32602, Message: fmt.Sprintf("preset %q not found", preset)}
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("Switched active preset to %q", preset)}},
+	}, nil
+}
+
+func mcpTestVisionPreset(presetName string) (interface{}, *MCPError) {
+	var preset *VisionPreset
+	if presetName == "" {
+		preset = getActiveVisionPreset()
+	} else {
+		p, ok := getVisionPreset(presetName)
+		if !ok {
+			return nil, &MCPError{Code: -32602, Message: fmt.Sprintf("preset %q not found", presetName)}
+		}
+		preset = p
+	}
+	result := testVisionPreset(preset)
+	var lines []string
+	status := "FAILED"
+	if result.Success {
+		status = "OK"
+	}
+	lines = append(lines, fmt.Sprintf("Test %s for preset %q: %s", status, preset.Name, result.Message))
+	if result.Latency != "" {
+		lines = append(lines, fmt.Sprintf("Latency: %s", result.Latency))
+	}
+	return MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+	}, nil
 }
