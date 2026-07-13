@@ -41,6 +41,7 @@ type visionChatResponse struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Error *struct {
 		Message string `json:"message"`
@@ -83,9 +84,12 @@ func analyzeImageAsyncWithPrompt(itemID, promptName string) {
 		return true
 	})
 
+	start := time.Now()
 	result, err := analyzeImage(itemID, prompt.Prompt)
+	elapsed := time.Since(start).Round(time.Millisecond)
+
 	if err != nil {
-		log.Printf("Vision analysis FAILED for %s [%s]: %v", itemID, promptName, err)
+		log.Printf("Vision analysis FAILED for %s [%s] after %s: %v", itemID, promptName, elapsed, err)
 		updateItem(itemID, func(item *Item) bool {
 			if item.Analyses == nil {
 				item.Analyses = make(map[string]*ItemAnalysis)
@@ -115,8 +119,43 @@ func analyzeImageAsyncWithPrompt(itemID, promptName string) {
 		}
 		return true
 	})
-	log.Printf("Vision analysis complete for %s [%s]: type=%s, %d chars extracted, preset=%s",
-		itemID, promptName, result.ImageType, len(result.Text), preset.Name)
+
+	// Compute a simple quality score
+	score := scoreVisionResult(result, promptName)
+
+	log.Printf("Vision analysis complete for %s [%s]: type=%s, %d chars, %s, score=%.0f/100, preset=%s, model=%s",
+		itemID, promptName, result.ImageType, len(result.Text), elapsed, score, preset.Name, preset.Model)
+}
+
+// scoreVisionResult computes a simple 0-100 quality score for a vision analysis result
+func scoreVisionResult(result *visionAnalysisResult, expectedType string) float64 {
+	score := 0.0
+
+	// Text extracted (up to 40 pts)
+	if len(result.Text) > 0 {
+		score += min(float64(len(result.Text))/50.0, 40.0)
+	}
+
+	// Image type detected (30 pts if matches expected, 10 if any non-"other")
+	if result.ImageType == expectedType {
+		score += 30
+	} else if result.ImageType != "" && result.ImageType != "other" {
+		score += 10
+	}
+
+	// Has description (15 pts)
+	if result.Description != "" && result.Description != "Raw model output (JSON parsing failed)" {
+		score += 15
+	}
+
+	// No refusal markers (15 pts)
+	lower := strings.ToLower(result.Text)
+	if !strings.Contains(lower, "i cannot") && !strings.Contains(lower, "i can't") &&
+		!strings.Contains(lower, "unable to") && !strings.Contains(lower, "i'm unable") {
+		score += 15
+	}
+
+	return score
 }
 
 // analyzeImage reads the image file, sends it to the vision model with the given prompt, and parses the response.
@@ -131,6 +170,9 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 	if len(imgData) > maxVisionImageSize {
 		return nil, fmt.Errorf("image too large for vision processing (%d bytes, max %d)", len(imgData), maxVisionImageSize)
 	}
+
+	log.Printf("Vision API: sending %s (%d bytes image, %d bytes prompt) to %s",
+		itemID, len(imgData), len(promptText), visionEndpoint)
 
 	b64 := base64.StdEncoding.EncodeToString(imgData)
 	dataURL := fmt.Sprintf("data:image/png;base64,%s", b64)
@@ -165,15 +207,19 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 		req.Header.Set("Authorization", "Bearer "+p.APIKey)
 	}
 
+	apiStart := time.Now()
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
+	apiElapsed := time.Since(apiStart).Round(time.Millisecond)
 	if err != nil {
+		log.Printf("Vision API: request FAILED for %s after %s: %v", itemID, apiElapsed, err)
 		return nil, fmt.Errorf("vision API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Vision API: HTTP %d for %s after %s: %s", resp.StatusCode, itemID, apiElapsed, string(body))
 		return nil, fmt.Errorf("vision API returned %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -192,6 +238,9 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 
 	content := chatResp.Choices[0].Message.Content
 	content = stripMarkdownCodeFence(content)
+
+	log.Printf("Vision API: response for %s in %s, %d chars content, finish_reason=%s",
+		itemID, apiElapsed, len(content), chatResp.Choices[0].FinishReason)
 
 	var result visionAnalysisResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
