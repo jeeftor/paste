@@ -258,9 +258,13 @@ func analyzeImage(itemID, promptText string) (*visionAnalysisResult, error) {
 	return &result, nil
 }
 
-// stripMarkdownCodeFence removes ```json ... ``` wrapping if present
+// stripMarkdownCodeFence removes ```json ... ``` wrapping and <think>...</think> blocks if present
 func stripMarkdownCodeFence(s string) string {
 	s = strings.TrimSpace(s)
+	// Strip Qwen3 thinking blocks — content appears after </think>
+	if idx := strings.Index(s, "</think>"); idx != -1 {
+		s = strings.TrimSpace(s[idx+len("</think>"):])
+	}
 	if strings.HasPrefix(s, "```json") {
 		s = strings.TrimPrefix(s, "```json")
 	} else if strings.HasPrefix(s, "```") {

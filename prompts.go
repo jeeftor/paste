@@ -27,112 +27,128 @@ var (
 const promptsFileName = "prompts.json"
 
 // Built-in prompt templates
+// Optimized for Qwen3-VL-4B-Instruct-GGUF running via llama.cpp/Lemonade:
+// - JSON schema comes first so the model anchors to the output format immediately
+// - Direct imperative language (small models respond better than hedged phrasing)
+// - /no_think at the end disables Qwen3 thinking-mode tokens that break JSON parsing
 var builtinPrompts = []VisionPrompt{
 	{
 		Name:        "default",
 		Description: "General-purpose image analysis with OCR and description",
 		BuiltIn:     true,
-		Prompt: `Analyze this image and extract its content. Return a JSON object with this exact structure:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "terminal|code|screenshot|document|diagram|photo|other",
   "text": "all visible text extracted verbatim, preserving structure and line breaks",
   "description": "brief 1-2 sentence description of what the image shows"
 }
-For terminal screenshots: extract all text including commands, output, and errors.
-For code screenshots: extract the code preserving indentation, identify the language.
-For documents: OCR the text preserving layout.
-For diagrams/photos: describe what's shown and extract any visible text.
-Return ONLY the JSON object, no other text.`,
+
+Look at the image and fill in the JSON:
+- terminal: extract every command, output line, and error — keep prompt characters ($, >, #) and all line breaks
+- code: extract source code with EXACT indentation; note the programming language in description
+- screenshot: extract all visible text — URL bar, buttons, menus, headings, body text
+- document: OCR all text in reading order preserving layout
+- diagram/chart: extract all labels verbatim; describe structure, connections, and flow in description
+- photo: describe what is shown; extract any visible text
+
+Output the JSON only. /no_think`,
 	},
 	{
 		Name:        "terminal",
 		Description: "Terminal screenshot OCR — extracts commands, output, errors with structure",
 		BuiltIn:     true,
-		Prompt: `This is a terminal screenshot. Extract the visible text with these requirements:
-1. Extract ALL text exactly as it appears — commands, output, errors, paths
-2. Preserve command/output structure and line breaks
-3. Distinguish between user commands and system output
-4. Keep the prompt character ($, >, #) at the start of command lines
-
-Return a JSON object:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "terminal",
-  "text": "the complete terminal output, preserving line breaks and structure",
-  "description": "brief description of what the terminal shows"
+  "text": "complete terminal session text with ALL line breaks and prompt characters preserved",
+  "description": "brief description of what the terminal session shows"
 }
-Return ONLY the JSON object, no other text.`,
+
+This is a terminal screenshot. Extract ALL visible text:
+- Keep every prompt character ($, >, #, %) at the start of command lines
+- Preserve exact line breaks — do not merge or skip any lines
+- Include every command, output line, error, warning, and file path verbatim
+- Do not summarize, paraphrase, or omit anything
+
+Output the JSON only. /no_think`,
 	},
 	{
 		Name:        "code",
 		Description: "Code screenshot extraction — preserves indentation, identifies language",
 		BuiltIn:     true,
-		Prompt: `This is a code screenshot. Extract the source code with these requirements:
-1. Preserve exact indentation, whitespace, comments, string literals
-2. Identify the programming language based on syntax
-3. Exclude line numbers if visible
-4. If multiple code blocks are shown, extract each one
-
-Return a JSON object:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "code",
-  "text": "the extracted code, preserving indentation and structure",
+  "text": "extracted source code with exact indentation and whitespace preserved",
   "description": "brief description including the detected programming language"
 }
-Return ONLY the JSON object, no other text.`,
+
+This is a code screenshot. Extract the source code:
+- Preserve EXACT indentation — tabs and spaces both matter
+- Keep all comments, string literals, operators, and punctuation verbatim
+- Exclude line numbers if they appear in a gutter
+- Identify the programming language from syntax and include it in description
+
+Output the JSON only. /no_think`,
 	},
 	{
 		Name:        "document",
 		Description: "Document/receipt OCR — structured extraction with layout preservation",
 		BuiltIn:     true,
-		Prompt: `Extract structured data from this document image.
-
-Return a JSON object:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "document",
-  "text": "complete OCR text preserving layout and reading order",
-  "description": "brief description of the document type and key information"
+  "text": "complete OCR text in reading order, preserving layout",
+  "description": "brief description of document type and key information"
 }
-For receipts: focus on merchant, date, items, totals.
-For invoices: include invoice number, due date, vendor.
-For forms: extract all filled fields and their values.
-Return ONLY the JSON object, no other text.`,
+
+Extract all text from this document image:
+- OCR every word in reading order (top to bottom, left to right)
+- For receipts: include merchant name, date, every line item, subtotal, tax, and total
+- For invoices: include invoice number, vendor, due date, and all amounts
+- For forms: extract every field label and its filled-in value
+
+Output the JSON only. /no_think`,
 	},
 	{
 		Name:        "diagram",
 		Description: "Diagram/chart analysis — describes structure, connections, flow",
 		BuiltIn:     true,
-		Prompt: `Analyze this diagram or chart and provide a comprehensive textual description.
-
-Return a JSON object:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "diagram",
-  "text": "all readable text extracted verbatim from the diagram",
-  "description": "detailed description of the diagram structure, connections, flow direction, and relationships between elements"
+  "text": "all text labels and annotations extracted verbatim from the diagram",
+  "description": "detailed description of structure, connections, flow direction, and relationships between elements"
 }
-For flowcharts: describe the flow and decision points.
-For architecture diagrams: describe components and their connections.
-For charts: describe the data, axes, and trends.
-Return ONLY the JSON object, no other text.`,
+
+Analyze this diagram or chart:
+- Extract ALL text labels, node names, and annotations verbatim into text
+- Describe every connection, arrow, and relationship in description
+- For flowcharts: describe decision points and flow direction
+- For architecture diagrams: list every component and how they connect
+- For charts/graphs: describe axes, data series, values, and trends
+
+Output the JSON only. /no_think`,
 	},
 	{
 		Name:        "screenshot",
 		Description: "Desktop/browser screenshot — extracts UI elements, page content, URLs, menus",
 		BuiltIn:     true,
-		Prompt: `This is a screenshot of a desktop or browser. Extract all visible content with these requirements:
-1. Identify the application (browser, terminal, IDE, file manager, etc.)
-2. Extract the URL or window title if visible
-3. List visible UI elements: menus, buttons, tabs, navigation, toolbars
-4. Extract all text content visible on the page/screen
-5. Note any dialogs, notifications, or error messages
-6. Describe the layout (header, sidebar, main content, footer)
-
-Return a JSON object:
+		Prompt: `Output ONLY this JSON object, nothing else:
 {
   "image_type": "screenshot",
-  "text": "all visible text extracted verbatim — URLs, headings, buttons, labels, body text, menu items",
-  "description": "brief description of what the screenshot shows — application name, page title, and key UI elements"
+  "text": "all visible text — URLs, titles, buttons, labels, menus, headings, body text",
+  "description": "brief description of the application, page title, and key UI elements visible"
 }
-Return ONLY the JSON object, no other text.`,
+
+This is a desktop or browser screenshot. Extract ALL visible content:
+- Identify the application (browser, IDE, terminal, file manager, etc.)
+- Copy the URL bar or window title exactly as shown
+- Include every menu item, button label, tab name, and navigation element
+- Extract all body text, headings, and content visible on screen
+- Note any dialogs, popups, notifications, or error messages
+
+Output the JSON only. /no_think`,
 	},
 }
 
