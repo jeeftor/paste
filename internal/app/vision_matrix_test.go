@@ -96,6 +96,36 @@ func TestTryUnloadModelReportsHTTPFailure(t *testing.T) {
 	}
 }
 
+func TestMatrixFailureDetailsCaptureRuntimeAndResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/health":
+			_, _ = w.Write([]byte(`{"all_models_loaded":[{"model_name":"matrix-model","device":"gpu"}]}`))
+		case "/v1/system-stats":
+			_, _ = w.Write([]byte(`{"memory_gb":32,"gpu_percent":70,"vram_gb":12}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	details := newMatrixFailureDetails(&VisionPreset{Endpoint: server.URL + "/v1/chat/completions"}, PresetResult{
+		HTTPStatus:      http.StatusBadGateway,
+		HTTPStatusText:  "502 Bad Gateway",
+		ResponseHeaders: map[string]string{"X-Request-Id": "request-123"},
+	})
+	if details.HTTPStatus != http.StatusBadGateway || details.HTTPStatusText != "502 Bad Gateway" {
+		t.Errorf("HTTP details = %#v", details)
+	}
+	if details.ResponseHeaders["X-Request-Id"] != "request-123" {
+		t.Errorf("response headers = %#v", details.ResponseHeaders)
+	}
+	if details.Runtime.Provider != "lemonade" || len(details.Runtime.Models) != 1 {
+		t.Errorf("runtime = %#v, want Lemonade model snapshot", details.Runtime)
+	}
+}
+
 func TestVisionMatrixStreamsCellAndLifecycleEvents(t *testing.T) {
 	dir := setupTestDir(t)
 	t.Cleanup(func() { teardownTestDir(t, dir) })
