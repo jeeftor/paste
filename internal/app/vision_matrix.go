@@ -16,10 +16,20 @@ import (
 
 // MatrixCell is the result of one (preset × image × prompt) combination.
 type MatrixCell struct {
-	Success    bool   `json:"success"`
-	DurationMs int64  `json:"duration_ms"`
-	Preview    string `json:"preview,omitempty"` // first 200 chars of extracted text
-	Error      string `json:"error,omitempty"`
+	Success    bool                  `json:"success"`
+	DurationMs int64                 `json:"duration_ms"`
+	Preview    string                `json:"preview,omitempty"` // first 200 chars of extracted text
+	Error      string                `json:"error,omitempty"`
+	Failure    *MatrixFailureDetails `json:"failure,omitempty"`
+}
+
+// MatrixFailureDetails records the runtime state immediately after a failed cell.
+type MatrixFailureDetails struct {
+	CapturedAt      string            `json:"captured_at"`
+	HTTPStatus      int               `json:"http_status,omitempty"`
+	HTTPStatusText  string            `json:"http_status_text,omitempty"`
+	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	Runtime         runtimeStatus     `json:"runtime"`
 }
 
 // MatrixPresetResult holds all cells for one preset.
@@ -405,7 +415,7 @@ func runVisionMatrix(run *matrixRun, presets []*VisionPreset, prompts []*VisionP
 					slog.Error("vision matrix cell failed", "preset", preset.Name, "cell", cellNumber, "cell_total", cellsPerPreset, "overall_cell", overallCell, "image", imgType, "prompt", prompt.Name, "duration_ms", cell.DurationMs, "error", cell.Error)
 				}
 
-				sendEvent("cell_complete", map[string]interface{}{"preset": preset.Name, "image": imgType, "prompt": prompt.Name, "cell": cellNumber, "cell_total": cellsPerPreset, "overall_cell": overallCell, "overall_total": totalCells, "success": cell.Success, "duration_ms": cell.DurationMs, "error": cell.Error})
+				sendEvent("cell_complete", map[string]interface{}{"preset": preset.Name, "image": imgType, "prompt": prompt.Name, "cell": cellNumber, "cell_total": cellsPerPreset, "overall_cell": overallCell, "overall_total": totalCells, "success": cell.Success, "duration_ms": cell.DurationMs, "error": cell.Error, "failure": cell.Failure})
 			}
 		}
 
@@ -545,6 +555,7 @@ func runMatrixCell(tmpID string, preset *VisionPreset, prompt *VisionPrompt) *Ma
 	}
 	if !result.Success {
 		cell.Error = result.Error
+		cell.Failure = newMatrixFailureDetails(preset, result)
 	} else {
 		text := result.Text
 		if len(text) > 200 {
@@ -553,6 +564,17 @@ func runMatrixCell(tmpID string, preset *VisionPreset, prompt *VisionPrompt) *Ma
 		cell.Preview = text
 	}
 	return cell
+}
+
+func newMatrixFailureDetails(preset *VisionPreset, result PresetResult) *MatrixFailureDetails {
+	request, _ := http.NewRequest(http.MethodGet, "/api/vision/runtime", nil)
+	return &MatrixFailureDetails{
+		CapturedAt:      time.Now().UTC().Format(time.RFC3339),
+		HTTPStatus:      result.HTTPStatus,
+		HTTPStatusText:  result.HTTPStatusText,
+		ResponseHeaders: result.ResponseHeaders,
+		Runtime:         probeRuntime(request, preset),
+	}
 }
 
 // tryUnloadModel sends an Ollama-compatible keep_alive=0 request to ask the

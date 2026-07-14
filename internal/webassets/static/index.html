@@ -3143,6 +3143,7 @@ function renderVisionCompareResultHTML(result) {
 let _matrixMeta = null; // {presets, image_types, prompts, total_cells}
 let _matrixCounts = {};  // preset → {done, success}
 let _matrixActiveCells = {}; // preset → {cell: {image, prompt}}
+let _matrixFailures = {}; // matrix cell id → failure details
 let _matrixSource = null;
 let _matrixRuntimeTimer = null;
 
@@ -3158,6 +3159,7 @@ function testVisionMatrix({ resume = false } = {}) {
   _matrixMeta = null;
   _matrixCounts = {};
   _matrixActiveCells = {};
+  _matrixFailures = {};
   stopMatrixRuntimePolling();
 
   const es = new EventSource('/api/vision/test-matrix');
@@ -3167,6 +3169,7 @@ function testVisionMatrix({ resume = false } = {}) {
     _matrixMeta = JSON.parse(e.data);
     _matrixCounts = {};
     _matrixActiveCells = {};
+    _matrixFailures = {};
     resultDiv.innerHTML = buildMatrixSkeleton(_matrixMeta);
     updateMatrixHeader(0, _matrixMeta.total_cells);
     pollMatrixRuntime();
@@ -3213,8 +3216,9 @@ function testVisionMatrix({ resume = false } = {}) {
         td.innerHTML = `<span style="color:var(--success)">✓</span> <span style="color:var(--text-muted);font-size:10px">${formatDuration(d.duration_ms)}</span>`;
         td.title = '';
       } else {
-        td.innerHTML = `<span style="color:#f87171" title="${escapeHtml(d.error || '')}">✗</span>`;
-        td.title = d.error || '';
+        _matrixFailures[cellId] = d;
+        td.innerHTML = `<button type="button" data-cell="${cellId}" onclick="showMatrixFailure(this.dataset.cell)" style="color:#f87171;background:none;border:0;padding:0;cursor:pointer;font:inherit" title="Show failure details">✗</button>`;
+        td.title = 'Show failure details';
       }
     }
     // Update counts.
@@ -3345,6 +3349,7 @@ function buildMatrixSkeleton(meta) {
   html += `<div id="matrixMainHeader" style="font-weight:600;font-size:14px">Matrix running…</div>`;
   html += `<div id="matrixGlobalCount" style="font-size:12px;color:var(--text-muted)">0/${total_cells}</div>`;
   html += `</div>`;
+  html += `<div id="matrixFailureDetail" style="display:none;margin:0 0 12px;padding:10px;border:1px solid #7f1d1d;border-radius:6px;background:rgba(127,29,29,.14);font-size:12px"></div>`;
   html += `<div id="matrixBenchmark"></div>`;
 
   for (const preset of presets) {
@@ -3372,6 +3377,32 @@ function buildMatrixSkeleton(meta) {
   }
   html += `</div>`;
   return html;
+}
+
+function showMatrixFailure(cellId) {
+  const failure = _matrixFailures[cellId];
+  const panel = document.getElementById('matrixFailureDetail');
+  if (!failure || !panel) return;
+
+  const detail = failure.failure || {};
+  const runtime = detail.runtime || {};
+  const response = detail.http_status
+    ? `HTTP ${detail.http_status}${detail.http_status_text ? ` (${escapeHtml(detail.http_status_text)})` : ''}`
+    : 'No HTTP response received';
+  const headers = Object.entries(detail.response_headers || {})
+    .map(([name, value]) => `${escapeHtml(name)}: ${escapeHtml(value)}`)
+    .join(' · ');
+  const models = runtime.models?.length
+    ? runtime.models.map(model => escapeHtml(model.name)).join(', ')
+    : 'none reported';
+  const system = runtime.system
+    ? ` · RAM ${runtime.system.memory_gb?.toFixed(1) || '—'} GiB · GPU ${runtime.system.gpu_percent?.toFixed(0) || '—'}% · VRAM ${runtime.system.vram_gb?.toFixed(1) || '—'} GiB`
+    : '';
+  const captured = detail.captured_at ? new Date(detail.captured_at).toLocaleString() : 'unavailable';
+
+  panel.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><strong style="color:#fca5a5">Failed: ${escapeHtml(failure.image)} × ${escapeHtml(failure.prompt)}</strong><div style="margin-top:4px;color:#fecaca">${escapeHtml(failure.error || 'No error message returned.')}</div><div style="margin-top:6px;color:var(--text-muted)">Response: ${response}${headers ? ` · ${headers}` : ''}</div><div style="margin-top:2px;color:var(--text-muted)">Runtime at ${escapeHtml(captured)}: ${escapeHtml(runtime.provider || 'unknown')} · loaded: ${models}${system}${runtime.error ? ` · ${escapeHtml(runtime.error)}` : ''}</div></div><button type="button" onclick="this.parentElement.parentElement.style.display='none'" style="background:none;border:0;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1" title="Close">×</button></div>`;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function setPresetStatus(preset, msg, color) {
