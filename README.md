@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/jeeftor/klipbord/main/icon.svg" width="120" alt="Klipbord logo" />
+<img src="https://raw.githubusercontent.com/jeeftor/klipbord/main/internal/webassets/static/icon.svg" width="120" alt="Klipbord logo" />
 
 # Klipbord
 
