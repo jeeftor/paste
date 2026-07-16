@@ -44,6 +44,7 @@ var (
 
 // Run initializes Klipbord and starts its HTTP server.
 func Run(appVersion string, staticAssets Assets) {
+	configureLogCapture()
 	version = appVersion
 	assets = staticAssets
 	dataDir = envOr("DATA_DIR", defaultDataDir)
@@ -115,6 +116,7 @@ func NewHandler() *http.ServeMux {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/api/version", versionHandler)
 	mux.HandleFunc("/api/update-check", updateCheckHandler)
+	mux.HandleFunc("/api/logs", apiLogsHandler)
 	mux.HandleFunc("/api/openapi.json", openapiSpecHandler)
 	mux.HandleFunc("/swagger", swaggerHandler)
 	mux.HandleFunc("/mcp", mcpHandler)
