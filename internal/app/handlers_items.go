@@ -30,6 +30,7 @@ func apiFilesHandler(w http.ResponseWriter, r *http.Request) {
 	for left, right := 0, len(items)-1; left < right; left, right = left+1, right-1 {
 		items[left], items[right] = items[right], items[left]
 	}
+	includeAnalysisContent := r.URL.Query().Get("analysis") != "summary"
 	list := make([]map[string]interface{}, len(items))
 	for index, item := range items {
 		entry := map[string]interface{}{
@@ -45,11 +46,30 @@ func apiFilesHandler(w http.ResponseWriter, r *http.Request) {
 			"url":        linkURL(item.ID),
 		}
 		if len(item.Analyses) > 0 {
-			entry["analyses"] = item.Analyses
+			if includeAnalysisContent {
+				entry["analyses"] = item.Analyses
+			} else {
+				entry["analyses"] = analysisSummaries(item.Analyses)
+			}
 		}
 		list[index] = entry
 	}
 	writeJSON(w, map[string]interface{}{"items": list})
+}
+
+func analysisSummaries(analyses map[string]*ItemAnalysis) map[string]map[string]interface{} {
+	summaries := make(map[string]map[string]interface{}, len(analyses))
+	for name, analysis := range analyses {
+		if analysis == nil {
+			continue
+		}
+		summaries[name] = map[string]interface{}{
+			"status":      analysis.Status,
+			"backend":     analysis.Backend,
+			"duration_ms": analysis.DurationMs,
+		}
+	}
+	return summaries
 }
 
 func apiFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +79,19 @@ func apiFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) >= 2 && parts[1] == "analysis" {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		item, ok := findItem(id)
+		if !ok {
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			return
+		}
+		writeJSON(w, map[string]interface{}{"id": item.ID, "analyses": item.Analyses})
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "url" {
 		item, ok := findItem(id)
 		if !ok {

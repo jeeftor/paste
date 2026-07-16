@@ -206,6 +206,44 @@ func TestListFiles(t *testing.T) {
 	}
 }
 
+func TestListFilesAnalysisSummaryAndDetail(t *testing.T) {
+	server, _ := setupTestServer(t)
+
+	resp := doRequest(t, server, "POST", "/api/text", strings.NewReader(`{"content":"summary test","name":"summary.txt"}`))
+	itemID := parseJSON(t, resp)["id"].(string)
+	if !updateItem(itemID, func(item *Item) bool {
+		item.Analyses = map[string]*ItemAnalysis{
+			"default": {
+				Status:      "complete",
+				Text:        "full extracted text",
+				Description: "full description",
+				Backend:     "vision-model",
+				DurationMs:  123,
+			},
+		}
+		return true
+	}) {
+		t.Fatal("could not add test analysis")
+	}
+
+	resp = doRequest(t, server, "GET", "/api/files?analysis=summary", nil)
+	items := parseJSON(t, resp)["items"].([]interface{})
+	entry := items[0].(map[string]interface{})
+	analysis := entry["analyses"].(map[string]interface{})["default"].(map[string]interface{})
+	if _, ok := analysis["text"]; ok {
+		t.Error("summary response included full extracted text")
+	}
+	if analysis["status"] != "complete" {
+		t.Errorf("summary status = %v, expected complete", analysis["status"])
+	}
+
+	resp = doRequest(t, server, "GET", "/api/files/"+itemID+"/analysis", nil)
+	detail := parseJSON(t, resp)["analyses"].(map[string]interface{})["default"].(map[string]interface{})
+	if detail["text"] != "full extracted text" {
+		t.Errorf("detail text = %v, expected full extracted text", detail["text"])
+	}
+}
+
 func TestListFilesPersistentFilter(t *testing.T) {
 	server, _ := setupTestServer(t)
 

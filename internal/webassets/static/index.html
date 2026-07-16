@@ -10,8 +10,8 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Klipbord</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
-<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" media="print" onload="this.media='all'">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js" defer></script>
 <style>
 :root {
   --bg: #0d1117;
@@ -36,7 +36,11 @@ body {
   font-family: var(--font);
   font-size: 14px;
   line-height: 1.5;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -47,8 +51,8 @@ body {
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex-shrink: 0;
   z-index: 100;
 }
 .header h1 {
@@ -439,6 +443,25 @@ body {
   color: var(--text-muted);
   font-size: 13px;
 }
+.items-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.items-loading::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner 0.7s linear infinite;
+}
+@keyframes spinner { to { transform: rotate(360deg); } }
 .persistent-controls {
   display: flex;
   gap: 8px;
@@ -880,8 +903,9 @@ body {
   border-bottom: 1px solid var(--border);
   padding: 0 24px;
   background: var(--bg);
-  position: sticky;
-  top: 57px;
+  position: relative;
+  flex-shrink: 0;
+  top: auto;
   z-index: 99;
 }
 .tab {
@@ -912,7 +936,14 @@ body {
   border-bottom-color: var(--accent);
 }
 .tab-content { display: none; }
-.tab-content.active { display: block; }
+.tab-content.active {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 68px;
+}
 
 /* Live log drawer */
 .log-drawer {
@@ -1207,6 +1238,7 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
       <input type="text" class="search-input" id="clipboardSearch" placeholder="Search filenames, text content, or vision results..." oninput="renderClipboardGrid()">
     </div>
+    <div class="items-loading" id="itemsLoading" role="status">Loading clipboard…</div>
     <div id="itemsGrid" class="items-grid"></div>
     <div id="emptyState" class="empty" style="display:none">
       <div class="empty-icon">📋</div>
@@ -1974,6 +2006,7 @@ function activateTab(tab) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${tab}"]`)?.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'clipboard') loadItems();
   if (tab === 'persistent') loadPersistentItems();
   if (tab === 'config') { loadVisionConfig(); loadVisionPrompts(); resumeMatrixIfRunning(); }
 }
@@ -2709,9 +2742,24 @@ function viewAnalysis(id) {
     return;
   }
 
-  const entries = Object.entries(item.analyses).sort(([left], [right]) => left.localeCompare(right));
+  currentModalId = id;
+  document.getElementById('modalTitle').textContent = `Analysis · ${item.name}`;
+  document.getElementById('modalCopyContentBtn').style.display = 'none';
+  document.getElementById('modalBody').textContent = 'Loading analysis…';
+  document.getElementById('modal').classList.add('show');
+  fetch(`${API}/files/${id}/analysis`)
+    .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+    .then(data => showAnalysis(item, data.analyses || {}))
+    .catch(err => {
+      document.getElementById('modalBody').textContent = `Failed to load analysis: ${err.message}`;
+    });
+}
+
+function showAnalysis(item, analyses) {
+  const entries = Object.entries(analyses).sort(([left], [right]) => left.localeCompare(right));
   if (entries.length === 0) {
     showToast('Analysis is no longer available', true);
+    closeModal();
     return;
   }
 
@@ -2728,8 +2776,7 @@ function viewAnalysis(id) {
     return details.join('\n');
   }).join('\n\n---\n\n');
 
-  window._currentItem = { id, type: 'analysis', content };
-  currentModalId = id;
+  window._currentItem = { id: item.id, type: 'analysis', content };
   document.getElementById('modalTitle').textContent = `Analysis · ${item.name}`;
   document.getElementById('modalCopyContentBtn').style.display = 'inline-flex';
   document.getElementById('modalBody').innerHTML = `<div class="analysis-detail">${entries.map(([promptName, analysis]) => {
@@ -4009,13 +4056,34 @@ function formatExpiry(expires) {
   return `${mins}m left`;
 }
 
+let clipboardLoadInFlight = false;
+let clipboardLoadedOnce = false;
+
+function setClipboardLoading(loading) {
+  const indicator = document.getElementById('itemsLoading');
+  const grid = document.getElementById('itemsGrid');
+  indicator.hidden = !loading || clipboardLoadedOnce;
+  grid.setAttribute('aria-busy', String(loading));
+}
+
 function loadItems() {
-  return fetch(`${API}/files?persistent=false`)
-    .then(r => r.json())
+  if (clipboardLoadInFlight) return Promise.resolve();
+  clipboardLoadInFlight = true;
+  setClipboardLoading(true);
+  return fetch(`${API}/files?persistent=false&analysis=summary`)
+    .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
     .then(data => {
       allClipboardItems = data.items || [];
       loadTextPreviews(allClipboardItems);
       renderClipboardGrid();
+      clipboardLoadedOnce = true;
+    })
+    .catch(err => {
+      showToast(`Failed to load clipboard: ${err.message}`, true);
+    })
+    .finally(() => {
+      clipboardLoadInFlight = false;
+      setClipboardLoading(false);
     });
 }
 
@@ -4409,9 +4477,10 @@ activateTab(tabFromLocation());
   let pulling = false;
   const indicator = document.getElementById('pullIndicator');
   const threshold = 70;
+  const activeContent = () => document.querySelector('.tab-content.active');
 
   document.addEventListener('touchstart', e => {
-    if (window.scrollY <= 0) {
+    if (activeContent()?.scrollTop <= 0) {
       pullStart = e.touches[0].clientY;
       pulling = true;
     }
@@ -4420,7 +4489,7 @@ activateTab(tabFromLocation());
   document.addEventListener('touchmove', e => {
     if (!pulling) return;
     const delta = e.touches[0].clientY - pullStart;
-    if (delta > 0 && window.scrollY <= 0) {
+    if (delta > 0 && activeContent()?.scrollTop <= 0) {
       indicator.classList.add('show');
       if (delta >= threshold) {
         indicator.classList.add('ready');
