@@ -29,6 +29,12 @@ func buildOpenAPISpec() map[string]interface{} {
 			{"url": baseURL, "description": "Current server"},
 		},
 		"paths": map[string]interface{}{
+			"/api/logs": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":   "Get the most recent in-memory server log lines",
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Redacted server log lines"}},
+				},
+			},
 			"/api/files": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary": "List all items",
