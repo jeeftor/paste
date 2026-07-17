@@ -30,14 +30,32 @@ var (
 
 // ItemAnalysis is the result of an optional vision analysis for an item.
 type ItemAnalysis struct {
-	Status      string    `json:"status"`
-	Text        string    `json:"text,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Backend     string    `json:"backend,omitempty"`
-	PromptName  string    `json:"prompt_name,omitempty"`
-	ProcessedAt time.Time `json:"processed_at,omitempty"`
-	DurationMs  int64     `json:"duration_ms,omitempty"`
-	Error       string    `json:"error,omitempty"`
+	Status      string          `json:"status"`
+	Text        string          `json:"text,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Evidence    *VisualEvidence `json:"evidence,omitempty"`
+	Backend     string          `json:"backend,omitempty"`
+	PromptName  string          `json:"prompt_name,omitempty"`
+	Question    string          `json:"question,omitempty"`
+	ProcessedAt time.Time       `json:"processed_at,omitempty"`
+	DurationMs  int64           `json:"duration_ms,omitempty"`
+	Error       string          `json:"error,omitempty"`
+}
+
+// VisualEvidence preserves visible facts that a text-only agent can reason over.
+type VisualEvidence struct {
+	Structure     []string    `json:"structure,omitempty"`
+	State         []string    `json:"state,omitempty"`
+	Uncertainties []string    `json:"uncertainties,omitempty"`
+	UIElements    []UIElement `json:"ui_elements,omitempty"`
+}
+
+// UIElement describes a visible interface control without inferring behavior.
+type UIElement struct {
+	Role     string   `json:"role"`
+	Label    string   `json:"label"`
+	State    []string `json:"state,omitempty"`
+	Location string   `json:"location,omitempty"`
 }
 
 // Item describes a text snippet or uploaded file.
@@ -189,9 +207,26 @@ func cloneItem(item Item) Item {
 			continue
 		}
 		analysisCopy := *analysis
+		analysisCopy.Evidence = cloneVisualEvidence(analysis.Evidence)
 		copy.Analyses[name] = &analysisCopy
 	}
 	return copy
+}
+
+func cloneVisualEvidence(evidence *VisualEvidence) *VisualEvidence {
+	if evidence == nil {
+		return nil
+	}
+	copy := *evidence
+	copy.Structure = append([]string(nil), evidence.Structure...)
+	copy.State = append([]string(nil), evidence.State...)
+	copy.Uncertainties = append([]string(nil), evidence.Uncertainties...)
+	copy.UIElements = make([]UIElement, len(evidence.UIElements))
+	for index, element := range evidence.UIElements {
+		copy.UIElements[index] = element
+		copy.UIElements[index].State = append([]string(nil), element.State...)
+	}
+	return &copy
 }
 
 func genID() (string, error) {

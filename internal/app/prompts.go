@@ -152,6 +152,30 @@ This is a desktop or browser screenshot. Extract ALL visible content:
 Output the JSON only. /no_think`,
 	},
 	{
+		Name:        "ui",
+		Description: "UI evidence for text-only agents — visible controls, layout, state, and uncertainty",
+		BuiltIn:     true,
+		Prompt: `Return exactly one valid JSON object. Do not use Markdown.
+
+You are producing visible UI evidence for a text-only software agent. Report only what is visible. Do not infer click behavior or unreadable text; use "[illegible]" when needed.
+
+{
+  "image_type": "ui",
+  "text": "visible text in reading order",
+  "description": "one factual sentence about the application or screen",
+  "evidence": {
+    "structure": ["ordered layout regions and relationships"],
+    "state": ["selected tabs, loading, errors, disabled controls, or other visible state"],
+    "uncertainties": ["unreadable or ambiguous visible details"],
+    "ui_elements": [
+      {"role": "button|input|tab|heading|text|image|dialog|navigation|status|other", "label": "visible label or [unlabeled]", "state": ["selected|disabled|loading|error|expanded"], "location": "top-left|top|top-right|middle-left|middle|middle-right|bottom-left|bottom|bottom-right"}
+    ]
+  }
+}
+
+Include hierarchy, selected tabs, controls, loading/error states, and relative placement. Preserve reading order. /no_think`,
+	},
+	{
 		Name:        "scan",
 		Description: "Dense document sweep — tiles tall images into overlapping sections for complete text extraction",
 		BuiltIn:     true,

@@ -159,8 +159,8 @@ func TestInitPrompts(t *testing.T) {
 	prompts = make(map[string]*VisionPrompt)
 	initPrompts()
 
-	// Should have 5 built-in prompts
-	expected := []string{"default", "terminal", "code", "document", "diagram"}
+	// Built-in prompts cover general OCR plus structured UI evidence.
+	expected := []string{"default", "terminal", "code", "document", "diagram", "screenshot", "ui"}
 	for _, name := range expected {
 		p, ok := prompts[name]
 		if !ok {
@@ -532,7 +532,7 @@ func TestMCPToolsList(t *testing.T) {
 		tm := tool.(map[string]interface{})
 		toolNames[tm["name"].(string)] = true
 	}
-	expected := []string{"list_files", "get_file", "upload_file", "create_text", "delete_file", "persist_file", "describe_image", "analyze_image", "list_prompts", "create_prompt", "update_prompt", "delete_prompt", "list_vision_presets", "set_vision_preset", "test_vision_preset", "test_vision"}
+	expected := []string{"list_files", "get_file", "upload_file", "create_text", "delete_file", "persist_file", "describe_image", "analyze_image", "inspect_image", "list_prompts", "create_prompt", "update_prompt", "delete_prompt", "list_vision_presets", "set_vision_preset", "test_vision_preset", "test_vision"}
 	for _, name := range expected {
 		if !toolNames[name] {
 			t.Errorf("tool %q not found in tools/list", name)
@@ -558,6 +558,9 @@ func TestMCPListPrompts(t *testing.T) {
 	}
 	if !strings.Contains(text, "terminal") {
 		t.Errorf("list_prompts text doesn't contain 'terminal': %s", text)
+	}
+	if !strings.Contains(text, "ui") {
+		t.Errorf("list_prompts text doesn't contain 'ui': %s", text)
 	}
 }
 
@@ -611,6 +614,64 @@ func TestMCPAnalyzeImage(t *testing.T) {
 	}
 	if !strings.Contains(text, "[code]") {
 		t.Errorf("analyze_image text doesn't contain prompt name: %s", text)
+	}
+}
+
+func TestMCPInspectImage(t *testing.T) {
+	mockResponse := `{"image_type":"ui","text":"Clipboard  Loading clipboard...","description":"Klipbord clipboard screen","evidence":{"structure":["toolbar above content"],"state":["Clipboard tab selected","loading"],"uncertainties":[],"ui_elements":[{"role":"tab","label":"Clipboard","state":["selected"],"location":"top-left"}]}}`
+	server, _, _ := setupVisionTestServer(t, mockResponse)
+
+	id := uploadTestImage(t, server, createMinimalPNG(t))
+	question := "Which tab is selected, and is the clipboard loading?"
+	body := strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"inspect_image","arguments":{"id":"%s","mode":"ui","question":%q}}}`, id, question))
+	resp, err := http.Post(server.URL+"/mcp", "application/json", body)
+	if err != nil {
+		t.Fatalf("MCP call failed: %v", err)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	text := result["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "Visible evidence:") || !strings.Contains(text, `"ui_elements"`) {
+		t.Errorf("inspect_image did not return structured evidence: %s", text)
+	}
+	item, ok := findItem(id)
+	if !ok {
+		t.Fatal("item not found")
+	}
+	var analysis *ItemAnalysis
+	for name, candidate := range item.Analyses {
+		if strings.HasPrefix(name, "inspect:ui:") {
+			analysis = candidate
+			break
+		}
+	}
+	if analysis == nil {
+		t.Fatal("focused inspection was not stored")
+	}
+	if analysis.Question != question {
+		t.Errorf("stored question = %q, expected %q", analysis.Question, question)
+	}
+	if analysis.Evidence == nil || len(analysis.Evidence.UIElements) != 1 {
+		t.Errorf("stored evidence = %#v, expected UI evidence", analysis.Evidence)
+	}
+}
+
+func TestMCPInspectImageRejectsInvalidMode(t *testing.T) {
+	server, _, _ := setupVisionTestServer(t, `{"image_type":"ui","text":"","description":""}`)
+	id := uploadTestImage(t, server, createMinimalPNG(t))
+	body := strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"inspect_image","arguments":{"id":"%s","mode":"photo","question":"What is visible?"}}}`, id))
+	resp, err := http.Post(server.URL+"/mcp", "application/json", body)
+	if err != nil {
+		t.Fatalf("MCP call failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	message := result["error"].(map[string]interface{})["message"].(string)
+	if !strings.Contains(message, "mode must be one of") {
+		t.Errorf("invalid mode error = %q", message)
 	}
 }
 

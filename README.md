@@ -228,6 +228,7 @@ curl /api/openapi.json
 | `persist_file` | Pin or unpin an item |
 | `describe_image` | Get vision analysis for an image |
 | `analyze_image` | Trigger/re-trigger vision analysis |
+| `inspect_image` | Ask a focused visual question and return structured visible evidence |
 | `list_prompts` | List all available vision prompts |
 | `create_prompt` | Create a new vision prompt template |
 | `update_prompt` | Update an existing prompt |
@@ -253,6 +254,9 @@ curl /api/openapi.json
 
 // Trigger re-analysis
 {"name": "analyze_image", "arguments": {"id": "abc123", "prompt": "code"}}
+
+// Ask a question with UI evidence tailored for a text-only agent
+{"name": "inspect_image", "arguments": {"id": "abc123", "mode": "ui", "question": "Which tab is selected, and is the clipboard still loading?"}}
 
 // Compare all presets on a sample image
 {"name": "compare_vision", "arguments": {"image_type": "terminal"}}

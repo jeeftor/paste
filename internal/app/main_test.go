@@ -292,12 +292,17 @@ func TestListItemsCopiesAnalyses(t *testing.T) {
 	setupTestDir(t)
 	item := makeImageItem("analysis01", "image.png")
 	item.Analyses = map[string]*ItemAnalysis{
-		"default": {Status: "complete", Text: "original"},
+		"default": {Status: "complete", Text: "original", Evidence: &VisualEvidence{
+			Structure:  []string{"header above content"},
+			UIElements: []UIElement{{Role: "tab", Label: "Clipboard", State: []string{"selected"}}},
+		}},
 	}
 	addItem(item)
 
 	items := listItems()
 	items[0].Analyses["default"].Text = "modified"
+	items[0].Analyses["default"].Evidence.Structure[0] = "modified"
+	items[0].Analyses["default"].Evidence.UIElements[0].State[0] = "disabled"
 	items[0].Analyses["extra"] = &ItemAnalysis{Status: "pending"}
 
 	original, ok := findItem("analysis01")
@@ -309,6 +314,12 @@ func TestListItemsCopiesAnalyses(t *testing.T) {
 	}
 	if _, exists := original.Analyses["extra"]; exists {
 		t.Error("listItems() returned a shared analyses map")
+	}
+	if got, want := original.Analyses["default"].Evidence.Structure[0], "header above content"; got != want {
+		t.Errorf("analysis evidence structure = %q, expected %q", got, want)
+	}
+	if got, want := original.Analyses["default"].Evidence.UIElements[0].State[0], "selected"; got != want {
+		t.Errorf("analysis evidence UI state = %q, expected %q", got, want)
 	}
 }
 

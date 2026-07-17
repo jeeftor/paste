@@ -49,9 +49,10 @@ type visionChatResponse struct {
 }
 
 type visionAnalysisResult struct {
-	ImageType   string `json:"image_type"`
-	Text        string `json:"text"`
-	Description string `json:"description"`
+	ImageType   string          `json:"image_type"`
+	Text        string          `json:"text"`
+	Description string          `json:"description"`
+	Evidence    *VisualEvidence `json:"evidence,omitempty"`
 }
 
 // classifyPrompt is a minimal single-word classification prompt.
@@ -175,6 +176,9 @@ func analyzeImageTwoPass(itemID string) {
 
 	// Pick the best matching prompt; fall back to "default" if no match
 	promptName := imageType
+	if imageType == "screenshot" {
+		promptName = "ui"
+	}
 	prompt, ok := getPrompt(promptName)
 	if !ok {
 		promptName = "default"
@@ -218,6 +222,7 @@ func analyzeImageTwoPass(itemID string) {
 			Status:      "complete",
 			Text:        result.Text,
 			Description: result.Description,
+			Evidence:    result.Evidence,
 			Backend:     visionModel,
 			PromptName:  promptName,
 			ProcessedAt: time.Now(),
@@ -456,6 +461,7 @@ func apiAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 			Status:      "complete",
 			Text:        result.Text,
 			Description: result.Description,
+			Evidence:    result.Evidence,
 			Backend:     visionModel,
 			PromptName:  promptName,
 			ProcessedAt: time.Now(),

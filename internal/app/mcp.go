@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -225,6 +226,28 @@ var mcpTools = []MCPTool{
 				},
 			},
 			"required": []string{"id"},
+		},
+	},
+	{
+		Name:        "inspect_image",
+		Description: "Ask a focused visual question about an image for a text-only agent. Returns structured visible evidence using the selected mode: ui, ocr, code, document, diagram, or describe.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{
+					"type":        "string",
+					"description": "The image item ID",
+				},
+				"mode": map[string]any{
+					"type":        "string",
+					"description": "Inspection mode: ui, ocr, code, document, diagram, or describe",
+				},
+				"question": map[string]any{
+					"type":        "string",
+					"description": "The specific visual question to answer from visible evidence",
+				},
+			},
+			"required": []string{"id", "mode", "question"},
 		},
 	},
 	{
@@ -539,6 +562,15 @@ func handleMCPToolCall(name string, args map[string]any) (interface{}, *MCPError
 			promptName = "default"
 		}
 		return mcpAnalyzeImage(id, promptName)
+
+	case "inspect_image":
+		id, _ := args["id"].(string)
+		mode, _ := args["mode"].(string)
+		question, _ := args["question"].(string)
+		if id == "" || mode == "" || question == "" {
+			return nil, &MCPError{Code: -32602, Message: "id, mode, and question are required"}
+		}
+		return mcpInspectImage(id, mode, question)
 
 	case "list_prompts":
 		return mcpListPrompts()
@@ -893,32 +925,89 @@ func mcpAnalyzeImage(id, promptName string) (interface{}, *MCPError) {
 	if err != nil {
 		return nil, &MCPError{Code: -32603, Message: "analysis failed: " + err.Error()}
 	}
+	analysis := &ItemAnalysis{
+		Status:      "complete",
+		Text:        result.Text,
+		Description: result.Description,
+		Evidence:    result.Evidence,
+		Backend:     visionModel,
+		PromptName:  promptName,
+		ProcessedAt: time.Now(),
+	}
 	updateItem(id, func(it *Item) bool {
 		if it.Analyses == nil {
 			it.Analyses = make(map[string]*ItemAnalysis)
 		}
-		it.Analyses[promptName] = &ItemAnalysis{
-			Status:      "complete",
-			Text:        result.Text,
-			Description: result.Description,
-			Backend:     visionModel,
-			PromptName:  promptName,
-			ProcessedAt: time.Now(),
-		}
+		it.Analyses[promptName] = analysis
 		return true
 	})
-	var lines []string
-	lines = append(lines, fmt.Sprintf("Analysis complete for %s [%s]:", id, promptName))
-	if result.Description != "" {
-		lines = append(lines, fmt.Sprintf("  Description: %s", result.Description))
-	}
-	if result.Text != "" {
-		lines = append(lines, "  Extracted text:")
-		lines = append(lines, result.Text)
-	}
 	return MCPToolResult{
-		Content: []MCPContent{{Type: "text", Text: strings.Join(lines, "\n")}},
+		Content: []MCPContent{{Type: "text", Text: formatAnalysis(id, item.Name, promptName, analysis)}},
 	}, nil
+}
+
+func mcpInspectImage(id, mode, question string) (interface{}, *MCPError) {
+	item, ok := findItem(id)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "item not found"}
+	}
+	if item.Type != "file" || !strings.HasPrefix(item.MimeType, "image/") {
+		return nil, &MCPError{Code: -32602, Message: "item is not an image"}
+	}
+	if !visionEnabled {
+		return nil, &MCPError{Code: -32603, Message: "vision processing is disabled"}
+	}
+
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	promptName, ok := inspectionPromptName(mode)
+	if !ok {
+		return nil, &MCPError{Code: -32602, Message: "mode must be one of: ui, ocr, code, document, diagram, describe"}
+	}
+	prompt, ok := getPrompt(promptName)
+	if !ok {
+		return nil, &MCPError{Code: -32603, Message: fmt.Sprintf("built-in prompt %q is unavailable", promptName)}
+	}
+
+	question = strings.TrimSpace(question)
+	promptText := fmt.Sprintf("%s\n\nSpecific question from the text-only agent:\n---\n%s\n---\nAnswer the question only from visible evidence while preserving the required JSON schema. /no_think", prompt.Prompt, question)
+	start := time.Now()
+	result, err := analyzeImage(id, promptText)
+	elapsed := time.Since(start).Round(time.Millisecond)
+	sum := sha256.Sum256([]byte(question))
+	analysisName := fmt.Sprintf("inspect:%s:%x", mode, sum[:4])
+	if err != nil {
+		updateItem(id, func(it *Item) bool {
+			if it.Analyses == nil {
+				it.Analyses = make(map[string]*ItemAnalysis)
+			}
+			it.Analyses[analysisName] = &ItemAnalysis{Status: "failed", Backend: visionModel, PromptName: promptName, Question: question, DurationMs: elapsed.Milliseconds(), Error: err.Error()}
+			return true
+		})
+		return nil, &MCPError{Code: -32603, Message: "inspection failed: " + err.Error()}
+	}
+
+	analysis := &ItemAnalysis{Status: "complete", Text: result.Text, Description: result.Description, Evidence: result.Evidence, Backend: visionModel, PromptName: promptName, Question: question, ProcessedAt: time.Now(), DurationMs: elapsed.Milliseconds()}
+	updateItem(id, func(it *Item) bool {
+		if it.Analyses == nil {
+			it.Analyses = make(map[string]*ItemAnalysis)
+		}
+		it.Analyses[analysisName] = analysis
+		return true
+	})
+	return MCPToolResult{Content: []MCPContent{{Type: "text", Text: formatAnalysis(id, item.Name, analysisName, analysis)}}}, nil
+}
+
+func inspectionPromptName(mode string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "ui":
+		return "ui", true
+	case "ocr", "describe":
+		return "default", true
+	case "code", "document", "diagram":
+		return strings.ToLower(strings.TrimSpace(mode)), true
+	default:
+		return "", false
+	}
 }
 
 func mcpListPrompts() (interface{}, *MCPError) {
@@ -946,9 +1035,19 @@ func formatAnalysis(id, name, promptName string, a *ItemAnalysis) string {
 	if a.Description != "" {
 		lines = append(lines, fmt.Sprintf("  Description: %s", a.Description))
 	}
+	if a.Question != "" {
+		lines = append(lines, fmt.Sprintf("  Question: %s", a.Question))
+	}
 	if a.Text != "" {
 		lines = append(lines, "  Extracted text:")
 		lines = append(lines, a.Text)
+	}
+	if a.Evidence != nil {
+		evidence, err := json.Marshal(a.Evidence)
+		if err == nil {
+			lines = append(lines, "  Visible evidence:")
+			lines = append(lines, string(evidence))
+		}
 	}
 	if a.Error != "" {
 		lines = append(lines, fmt.Sprintf("  Error: %s", a.Error))
